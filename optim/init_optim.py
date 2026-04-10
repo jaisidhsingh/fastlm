@@ -1,7 +1,8 @@
 """Intialize optimizer and scheduler."""
 
 import torch
-from .lr_schedule import WarmupCosine, WSD, WarmupConstant, LinearCooldown
+
+from .lr_schedule import WSD, LinearCooldown, WarmupConstant, WarmupCosine
 
 
 def intialize_optimizer(param_groups, cfg):
@@ -62,6 +63,17 @@ def intialize_optimizer(param_groups, cfg):
       warmup_steps=warmup_steps,
       betas=[cfg.beta1, cfg.beta2],
       weight_decay=cfg.weight_decay,
+    )
+
+  elif cfg.optim == 'muon':
+    optimizer = torch.optim.Muon(
+      param_groups,
+      lr=cfg.lr,
+      momentum=cfg.momentum,
+      ns_steps=cfg.ns_steps,
+      weight_decay=cfg.weight_decay,
+      nesterov=True,
+      eps=getattr(cfg, 'eps', 1e-7),
     )
 
   else:

@@ -4,10 +4,10 @@
 deterministic: False
 seed: 100
 
-trainset_path: "/fast/najroldi/data/lm/slim_pajama/new_sp_15B_tokens/train"
+trainset_path: "/fast/jsingh/data/openwebtext-tokenized-9b-saved"
 vocab_size: 50280
 seq_len: 2048
-sampler: 'sequential'
+sampler: "sequential"
 sampler_seed: null
 num_workers: 4
 
@@ -15,10 +15,10 @@ eval: False
 validset_path: null
 eval_every_steps: null
 
-model: 'transformer'
+model: "transformer"
 d_model: 768
-mlp_class: 'glu'
-expand: '8/3'
+mlp_class: "glu"
+expand: "8/3"
 n_layers: 12
 n_heads: 12
 rms_norm: True
@@ -35,17 +35,17 @@ grad_accumulation_steps: 8
 
 # note: choose between {float32, float16, bfloat16}
 # note: float16 data type will automatically use a GradScaler
-dtype: 'bfloat16'
+dtype: "bfloat16"
 
-optim: 'adamw'
-fused_optim: True 
+optim: "adamw"
+fused_optim: True
 lr: 3.e-3
 weight_decay: 0.1
 beta1: 0.9
 beta2: 0.95
 grad_clip: 1.0
 
-scheduler: 'warmup_cosine'
+scheduler: "warmup_cosine"
 warmup_steps: 0.1
 cooldown_steps: null
 lr_start: 0.0
@@ -56,11 +56,11 @@ log_every_steps: 1
 print_progress: True
 
 use_wandb: False
-wandb_project: 'llm'
-wandb_dir: '/fast/najroldi/logs/llm/wandb'
-wandb_run_name: 'tr_check'
-exp_name: 'tr_check'
-out_dir: '/fast/najroldi/exp/llm'
+wandb_project: "llm"
+wandb_dir: "/fast/najroldi/logs/llm/wandb"
+wandb_run_name: "tr_check"
+exp_name: "tr_check"
+out_dir: "/fast/najroldi/exp/llm"
 over_write: True
 
 resume: False
@@ -70,4 +70,3 @@ resume_exp_name: null
 save_last_checkpoint: False
 save_intermediate_checkpoints: False
 save_every_steps: null
-
