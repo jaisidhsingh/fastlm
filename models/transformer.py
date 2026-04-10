@@ -1,13 +1,16 @@
 """Transformer++, a simple LLama-style Transformer, supporting RMSNorm, RoPE, GLU"""
 
 import math
+from dataclasses import dataclass
+
 import torch
 import torch.nn.functional as F
 from torch import nn
-from dataclasses import dataclass
 
-from .components import RMSNorm, MLP, GLU, MLPReluSquared
-from .embeddings import precompute_freqs_cis, apply_rotary_emb_complex_like
+from fla.layers import GatedDeltaNet
+
+from .components import GLU, MLP, MLPReluSquared, RMSNorm
+from .embeddings import apply_rotary_emb_complex_like, precompute_freqs_cis
 
 
 @dataclass
@@ -21,6 +24,9 @@ class ModelConfig:
   mlp: str = 'mlp'
   rmsnorm_eps: float = 1e-6
   tie_embeddings: bool = False
+  token_mixer: str = 'gdn+attn'
+  hybrid_mixer_ratio: int = 3
+  layer_norm_scaling: bool = False
 
 
 MLP_CLASSES = {'mlp': MLP, 'glu': GLU, 'mlp_relu_sq': MLPReluSquared}
@@ -53,6 +59,7 @@ class Attention(nn.Module):
     if attn_mask is not None:
       # attn_mask has shape (bsz, seqlen, seqlen)
       # from (bsz, L, L) to (bsz, 1, L, L) so it broadcasts over heads
+
       # import pdb
       # pdb.set_trace()
       attn_mask = attn_mask.unsqueeze(1)
@@ -67,10 +74,13 @@ class Attention(nn.Module):
     return self.w_out(out)
 
 
+TOKEN_MIXERS = {'gdn': GatedDeltaNet, 'attn': Attention}
+
+
 class Block(nn.Module):
-  def __init__(self, layer_id: int, cfg: ModelConfig):
+  def __init__(self, layer_id: int, token_mixer_type: str, cfg: ModelConfig):
     super().__init__()
-    self.attn = Attention(cfg)
+    self.attn = TOKENIZER_MIXERS[token_mixer_type](cfg)
     self.attn_norm = RMSNorm(cfg.dim, cfg.rmsnorm_eps)
     self.mlp = MLP_CLASSES[cfg.mlp](dim=cfg.dim, hidden_dim=int(cfg.expand * cfg.dim))
     self.mlp_norm = RMSNorm(cfg.dim, cfg.rmsnorm_eps)
@@ -104,6 +114,28 @@ class Transformer(nn.Module):
 
     if cfg.tie_embeddings:
       self.tie_weights()
+
+  def prepare_layers(self, cfg):
+    if '+' in cfg.token_mixer:
+      token_mixers = cfg.token_mixer.split('+')
+      assert len(token_mixers) == 2, 'Only support two token mixers for now'
+      assert all(tm in TOKEN_MIXERS for tm in token_mixers), (
+        f'Unknown token mixer(s) {token_mixers}, supported: {list(TOKEN_MIXERS.keys())}'
+      )
+      layers = []
+      for idx in range(cfg.n_layers):
+        if idx != 0 and idx % cfg.hybrid_mixer_ratio == 0:
+          token_mixer_type = token_mixers[-1]
+        else:
+          token_mixer_type = token_mixers[0]
+        layers.append(Block(idx, token_mixer_type, cfg))
+
+    else:
+      layers = []
+      for idx in range(cfg.n_layers):
+        layers.append(Block(idx, cfg.token_mixer, cfg))
+
+    return nn.ModuleList(layers)
 
   def forward(self, x, attn_mask):
     # x: (bsz, seqlen)
