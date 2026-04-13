@@ -5,8 +5,8 @@ deterministic: False
 seed: 100
 
 trainset_path: "/fast/jsingh/data/openwebtext-tokenized-9b-saved"
-vocab_size: 50280
-seq_len: 2048
+vocab_size: 50304
+seq_len: 1024
 sampler: "sequential"
 sampler_seed: null
 num_workers: 4
