@@ -27,7 +27,7 @@ class ModelConfig:
   tie_embeddings: bool = False
 
   token_mixer: str = 'gdn+attn'
-  hybrid_mixer_ratio = 3
+  hybrid_mixer_ratio: int = 3
   # means 3:1 (one attention after every 3 gdn layers, type before the + symbol is the "every ratio layers")
   layer_norm_scaling: bool = False
 
@@ -58,8 +58,8 @@ class GatedAttention(nn.Module):
     if self.use_gate:
       self.w_gate = nn.Linear(cfg.dim, cfg.dim, bias=False)
     if self.qk_norm:
-      self.q_norm = RMSNorm(cfg.dim, cfg.rmsnorm_eps)
-      self.k_norm = RMSNorm(cfg.dim, cfg.rmsnorm_eps)
+      self.q_norm = RMSNorm(self.head_dim, cfg.rmsnorm_eps)
+      self.k_norm = RMSNorm(self.head_dim, cfg.rmsnorm_eps)
 
   def forward(self, x, freqs_cis: torch.Tensor | None, attention_mask: torch.Tensor | None = None):
     bsz, seqlen, d = x.shape  # (bsz, seqlen, d)
@@ -80,13 +80,13 @@ class GatedAttention(nn.Module):
     k = k.transpose(1, 2)  # (bsz, nh, seqlen, h_dim)
     v = v.transpose(1, 2)  # (bsz, nh, seqlen, h_dim)
 
-    if attn_mask is not None:
+    if attention_mask is not None:
       # attn_mask has shape (bsz, seqlen, seqlen)
       # from (bsz, L, L) to (bsz, 1, L, L) so it broadcasts over heads
 
       # import pdb
       # pdb.set_trace()
-      attn_mask = attn_mask.unsqueeze(1)
+      attention_mask = attention_mask.unsqueeze(1)
       # pdb.set_trace()
 
       out = F.scaled_dot_product_attention(q, k, v, attn_mask=attention_mask)  # (bsz, nh, seqlen, h_dim)
@@ -106,6 +106,7 @@ SUPPORTED_TOKEN_MIXERS = {'gdn': 'gated_deltanet', 'attn': 'gated_attention'}
 
 class Block(nn.Module):
   def __init__(self, layer_id: int, token_mixer_type: str, cfg: ModelConfig):
+    super().__init__()
     assert token_mixer_type in SUPPORTED_TOKEN_MIXERS, 'Input token mixer is not supported'
 
     if token_mixer_type == 'attn':
@@ -131,11 +132,22 @@ class Block(nn.Module):
     # x: (bsz, seqlen, dim)
     scaling = 1.0 if not self.layer_norm_scaling else math.sqrt(self.layer_id + 1)
 
-    x = scaling * self.token_mixer(x)
+    x = scaling * self.token_mixer_norm(x)
     if isinstance(self.token_mixer, GatedAttention):
       x = x + self.token_mixer(x, freqs_cis, attention_mask)
+
     elif isinstance(self.token_mixer, GatedDeltaNet):
-      x = x + self.token_mixer(hidden_states=x, attention_mask=attention_mask)
+      if attention_mask.ndim == 3:
+        (
+          torch.equal(
+            attention_mask[:, :, 0], torch.ones(x.shape[0], x.shape[1]).to(device=x.device, dtype=torch.bool)
+          ),
+          'GatedDeltaNet requires an attention mask different than that of GatedAttention!',
+        )
+        o, _, past_key_values = self.token_mixer(hidden_states=x, attention_mask=attention_mask[:, :, 0])
+      elif attention_mask.ndim == 2:
+        o, _, past_key_values = self.token_mixer(hidden_states=x, attention_mask=attention_mask)
+      x = x + o
 
     x = scaling * self.mlp_norm(x)
     x = x + self.mlp(x)
@@ -151,15 +163,15 @@ class Transformer(nn.Module):
       raise ValueError('dim must be divisible by n_heads')
 
     self.embed_tokens = nn.Embedding(cfg.vocab_size, cfg.dim)
-    self.layers = nn.ModuleList([Block(idx, cfg) for idx in range(cfg.n_layers)])
+    self.layers = self.prepare_layers(cfg)
     self.out_norm = RMSNorm(cfg.dim, cfg.rmsnorm_eps)
     self.lm_head = nn.Linear(cfg.dim, cfg.vocab_size, bias=False)
 
     self.freqs_cis = precompute_freqs_cis(head_dim, cfg.seq_len, 500000)[0 : cfg.seq_len]
 
     # init all weights, scale residual branches
-    # self.apply(self._init_weights)
-    # self._scale_residual_branches()
+    self.apply(self._init_weights)
+    self._scale_residual_branches()
 
     if cfg.tie_embeddings:
       self.tie_weights()
@@ -168,7 +180,7 @@ class Transformer(nn.Module):
     if '+' in cfg.token_mixer:
       token_mixers = cfg.token_mixer.split('+')
       assert len(token_mixers) == 2, 'Only support two token mixers for now'
-      assert all(tm in TOKEN_MIXERS for tm in token_mixers), (
+      assert all(tm in SUPPORTED_TOKEN_MIXERS for tm in token_mixers), (
         f'Unknown token mixer(s) {token_mixers}, supported: {list(TOKEN_MIXERS.keys())}'
       )
       layers = []
@@ -186,12 +198,14 @@ class Transformer(nn.Module):
 
     return nn.ModuleList(layers)
 
-  def forward(self, x, attn_mask):
+  def forward(self, x, attention_mask):
     # x: (bsz, seqlen)
     x = self.embed_tokens(x)  # (bsz, seqlen, dim)
     self.freqs_cis = self.freqs_cis.to(x.device)
+
     for layer in self.layers:
-      x = layer(x, self.freqs_cis, attn_mask)  # (bsz, seqlen, dim)
+      x = layer(x, self.freqs_cis, attention_mask)  # (bsz, seqlen, dim)
+
     return self.lm_head(self.out_norm(x))  # (bsz, seqlen, vocab_size)
 
   def _init_weights(self, module):
@@ -207,6 +221,8 @@ class Transformer(nn.Module):
       if n.endswith('fc2.weight'):  # mlp/glu output layer
         torch.nn.init.normal_(p, mean=0.0, std=0.02 / math.sqrt(2 * self.n_layers))
       if n.endswith('w_out.weight'):  # attn output layer
+        torch.nn.init.normal_(p, mean=0.0, std=0.02 / math.sqrt(2 * self.n_layers))
+      if n.endswith('o_proj.weight'):  # gdn output layer
         torch.nn.init.normal_(p, mean=0.0, std=0.02 / math.sqrt(2 * self.n_layers))
 
   def tie_weights(self):
