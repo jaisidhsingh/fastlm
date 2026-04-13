@@ -1,16 +1,20 @@
-import os
-import yaml
 import math
+import os
 import shutil
-import wandb
-import torch
-
-from itertools import product
 from collections import namedtuple
+from itertools import product
 
+import torch
+import wandb
+import yaml
 from absl import flags
 
 FLAGS = flags.FLAGS
+
+
+def get_chincilla_details(param_count):
+  return {'token_count': 20 * param_count, 'flop_count': 6 * 20 * (param_count**2)}
+
 
 def load_config(path):
   """
@@ -33,7 +37,7 @@ def load_config(path):
 
     sweep_size = len(combinations)
     if FLAGS.job_idx >= sweep_size:
-      raise ValueError("job_idx exceeds the total number of hyperparam combinations.")
+      raise ValueError('job_idx exceeds the total number of hyperparam combinations.')
 
     combination = combinations[FLAGS.job_idx]
     cfg = {keys[i]: combination[i] for i in range(len(keys))}
@@ -139,8 +143,7 @@ def get_exp_dir_path(cfg):
   """Build a exp_dir path from config. It supports job arrays."""
   exp_dir = os.path.join(cfg.out_dir, cfg.exp_name)
   if FLAGS.job_idx is not None:  # subfolder for each job in the sweep
-    exp_dir = os.path.join(exp_dir, f"job_idx_{FLAGS.job_idx}")
-  return exp_dir
+    exp_dir = os.path.join(exp_dir, f'job_idx_{FLAGS.job_idx}')
 
 
 def maybe_make_dir(cfg):

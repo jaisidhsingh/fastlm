@@ -4,10 +4,10 @@ DataSampler, from:
 - https://github.com/facebookresearch/vissl/blob/main/vissl/data/data_helper.py#L93
 """
 
-from typing import Sized, Optional
+from typing import Optional, Sized
+
 import numpy as np
 import torch
-
 from torch.utils.data import Sampler
 from torch.utils.data.distributed import DistributedSampler
 
@@ -108,7 +108,7 @@ class StatefulDistributedSampler(DistributedSampler):
 
 class DeterministicDistributedSampler(StatefulDistributedSampler):
   """
-  StatefulDistributedSampler that does not generates random permutations but
+  StatefulDistributedSampler that does not generate random permutations but
   instead uses a fixed assignment of samples for each rank.
 
   Useful for debugging: it gives 100% reproducible sample assignments.

@@ -1,11 +1,10 @@
 import torch
-
 from datasets import Dataset, load_from_disk
 from torch import distributed as dist
+from torch.utils.data import DataLoader, RandomSampler, SequentialSampler
 from torch.utils.data.distributed import DistributedSampler
-from torch.utils.data import DataLoader, SequentialSampler, RandomSampler
 
-from data.datasamplers import StatefulSequentialSampler, StatefulRandomSampler, StatefulDistributedSampler
+from data.datasamplers import StatefulDistributedSampler, StatefulRandomSampler, StatefulSequentialSampler
 
 
 def get_dataloaders(cfg):
