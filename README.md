@@ -1,15 +1,17 @@
-# Pretrain a Transformer on Language Modeling
-A minimal yet efficient implementation of causal language modeling in PyTorch.
+# `fastlm`
 
-It features a custom torch-compilable Transformer model implementation supporting RoPE, GLU, and RMSNorm.
-It supports distributed training via Distributed Data Parallel (DDP).
+A highly-controllable yet easily hackable setup for causal language modeling. Built off of a fork of `plainLM` by the amazing Niccolo Ajroldi.
 
-A dedicated script is included for downloading, tokenizing, and chunking data, making data preparation seamless.
+## Features
+
+- [x] A custom, torch-compilable transformer implementation supporting RoPE, GLU, RMSNorm, GatedDeltaNet, GatedAttention, helpers to easily instantiate hybrid models.
+- [x] Distributed training via Distributed Data Parallel (DDP).
+- [x] A dedicated script for downloading, tokenizing, and chunking data, making data preparation seamless.
 
 ## 🛠 Installation
-We recommend running `plainLM` in a dedicated Python environment. To install dependencies in an Anaconda environment, execute:
+It is recommended to run `fastlm` in a dedicated Python environment. To install dependencies in a `conda` environment, run:
 ```bash
-conda create --name plainLM python=3.12 -y && conda activate plainLM && cd plainLM
+conda create --name fastlm python=3.12 -y && conda activate fastlm && cd fastlm
 pip install .
 ```
 
@@ -69,6 +71,9 @@ plainLM/
 - add seed to `DistributedSampler`
 
 ## Citation
+
+If you found this codebase useful, please cite the original repository that this is a fork of:
+
 ```bibtex
 @misc{ajroldi2024plainlm,
   author = {Niccolò Ajroldi},
@@ -78,7 +83,7 @@ plainLM/
 }
 ```
 
-## Credits
+## Credits (for `plainLM`)
 This project was inspired by:  
 - [Cramming](https://github.com/JonasGeiping/cramming) by Jonas Geiping
 - [GPT-NeoX](https://github.com/EleutherAI/gpt-neox) by EleutherAI
