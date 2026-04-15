@@ -1,0 +1,7 @@
+model:
+  d_model: 32
+  n_layers: 6
+opt:
+  momentum: 0.9
+  name: muon
+  ns_steps: 5
