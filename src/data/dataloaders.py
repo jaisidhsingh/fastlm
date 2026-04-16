@@ -4,7 +4,7 @@ from torch import distributed as dist
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler
 from torch.utils.data.distributed import DistributedSampler
 
-from data.datasamplers import StatefulDistributedSampler, StatefulRandomSampler, StatefulSequentialSampler
+from src.data.datasamplers import StatefulDistributedSampler, StatefulRandomSampler, StatefulSequentialSampler
 
 
 def get_dataloaders(cfg):
@@ -17,11 +17,22 @@ def get_dataloaders(cfg):
   train_sampler = _get_sampler(train_set, cfg)
 
   # only used with intra-document masking
-  def collate_fn(batch):
+  def intra_document_collate_fn(batch):
     return {
       'input_ids': torch.stack([x['input_ids'] for x in batch], dim=0),
       'docs_lengths': [x['docs_lengths'].tolist() for x in batch],
     }
+
+  def owt_nn_gpt2_collate_fn(batch):
+    return {'input_ids': torch.stack([torch.tensor(x['tokens'], dtype=torch.long) for x in batch], dim=0)}
+
+  collate_fn = None
+  if 'docs_lengths' in train_set.column_names:
+    collate_fn = intra_document_collate_fn
+  elif 'gpt2' in cfg.trainset_path:
+    collate_fn = owt_nn_gpt2_collate_fn
+  else:
+    collate_fn = None
 
   trainloader = DataLoader(
     train_set,
@@ -31,7 +42,7 @@ def get_dataloaders(cfg):
     pin_memory=True,
     prefetch_factor=2 if cfg.num_workers > 0 else None,
     persistent_workers=True if cfg.num_workers > 0 else False,
-    collate_fn=collate_fn if 'docs_lengths' in train_set.column_names else None,
+    collate_fn=collate_fn,
   )
 
   if not cfg.validset_path:
@@ -60,7 +71,7 @@ def get_dataloaders(cfg):
       pin_memory=True,
       prefetch_factor=2 if cfg.num_workers > 0 else None,
       persistent_workers=False,
-      collate_fn=collate_fn if 'docs_lengths' in train_set.column_names else None,
+      collate_fn=collate_fn,
     )
 
   return trainloader, validloader

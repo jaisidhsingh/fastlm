@@ -41,8 +41,6 @@ class MLP(nn.Module):
 
 
 class GLU(nn.Module):
-  """fused GLU"""
-
   def __init__(self, dim: int, hidden_dim: int, multiple_of: int = 256):
     super().__init__()
     hidden_dim = multiple_of * ((hidden_dim + multiple_of - 1) // multiple_of)
@@ -57,8 +55,6 @@ class GLU(nn.Module):
 
 
 class MLPReluSquared(nn.Module):
-  """MLP with ReLU squared"""
-
   def __init__(self, dim: int, hidden_dim: int, multiple_of: int = 256):
     super().__init__()
     hidden_dim = multiple_of * ((hidden_dim + multiple_of - 1) // multiple_of)

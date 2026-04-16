@@ -1,5 +1,3 @@
-"""Transformer++, a simple LLama-style Transformer, supporting RMSNorm, RoPE, GLU"""
-
 import math
 import typing as tp
 from dataclasses import dataclass
@@ -9,9 +7,8 @@ import torch.nn.functional as F
 from torch import nn
 
 from fla.layers import GatedDeltaNet
-
-from .components import GLU, MLP, MLPReluSquared, RMSNorm
-from .embeddings import apply_rotary_emb_complex_like, precompute_freqs_cis
+from src.models.components import GLU, MLP, MLPReluSquared, RMSNorm
+from src.models.embeddings import apply_rotary_emb_complex_like, precompute_freqs_cis
 
 
 @dataclass
@@ -26,11 +23,12 @@ class ModelConfig:
   rmsnorm_eps: float = 1e-6
   tie_embeddings: bool = False
 
+  # if there is not `+` symbol in the string below, the model is instantiated as a pure (non-hybrid) model
   token_mixer: str = 'gdn+attn'
   hybrid_mixer_ratio: int = 3
   # means 3:1 (one attention after every 3 gdn layers, type before the + symbol is the "every ratio layers")
   layer_norm_scaling: bool = False
-
+  residual_connection: str = 'add'
   attn_gate: bool = True
   attn_qk_norm: bool = True
 
@@ -101,7 +99,7 @@ class GatedAttention(nn.Module):
     return self.w_out(out)
 
 
-SUPPORTED_TOKEN_MIXERS = {'gdn': 'gated_deltanet', 'attn': 'gated_attention'}
+SUPPORTED_TOKEN_MIXERS = {'gdn': GatedDeltaNet, 'attn': GatedAttention}
 
 
 class Block(nn.Module):
@@ -120,37 +118,48 @@ class Block(nn.Module):
         use_gate=cfg.gdn_gate,
         conv_size=cfg.gdn_conv_size,
       )
-
-    self.token_mixer_norm = RMSNorm(cfg.dim, cfg.rmsnorm_eps)
     self.mlp = MLP_CLASSES[cfg.mlp](dim=cfg.dim, hidden_dim=int(cfg.expand * cfg.dim))
-    self.mlp_norm = RMSNorm(cfg.dim, cfg.rmsnorm_eps)
 
     self.layer_id = layer_id
-    self.layer_norm_scaling = cfg.layer_norm_scaling
+    self.residual_connection = cfg.residual_connection
+
+    if self.residual_connection == 'add':
+      self.token_mixer_norm = RMSNorm(cfg.dim, cfg.rmsnorm_eps)
+      self.mlp_norm = RMSNorm(cfg.dim, cfg.rmsnorm_eps)
+      self.layer_norm_scaling = cfg.layer_norm_scaling
+
+    if self.residual_connection != 'add':
+      self.attn_mhc = lambda x: x
+      self.mlp_mhc = lambda x: x
 
   def forward(self, x, freqs_cis, attention_mask):
     # x: (bsz, seqlen, dim)
-    scaling = 1.0 if not self.layer_norm_scaling else math.sqrt(self.layer_id + 1)
+    if self.residual_connection == 'add':
+      scaling = 1.0 if not self.layer_norm_scaling else math.sqrt(self.layer_id + 1)
 
-    x = scaling * self.token_mixer_norm(x)
-    if isinstance(self.token_mixer, GatedAttention):
-      x = x + self.token_mixer(x, freqs_cis, attention_mask)
+      x = scaling * self.token_mixer_norm(x)
 
-    elif isinstance(self.token_mixer, GatedDeltaNet):
-      if attention_mask.ndim == 3:
-        (
-          torch.equal(
-            attention_mask[:, :, 0], torch.ones(x.shape[0], x.shape[1]).to(device=x.device, dtype=torch.bool)
-          ),
-          'GatedDeltaNet requires an attention mask different than that of GatedAttention!',
-        )
-        o, _, past_key_values = self.token_mixer(hidden_states=x, attention_mask=attention_mask[:, :, 0])
-      elif attention_mask.ndim == 2:
-        o, _, past_key_values = self.token_mixer(hidden_states=x, attention_mask=attention_mask)
+      o = None
+      if isinstance(self.token_mixer, GatedAttention):
+        o = self.token_mixer(x, freqs_cis, attention_mask)
+
+      elif isinstance(self.token_mixer, GatedDeltaNet):
+        if attention_mask.ndim == 3:
+          o, _, past_key_values = self.token_mixer(hidden_states=x, attention_mask=attention_mask[:, :, 0])
+        elif attention_mask.ndim == 2:
+          o, _, past_key_values = self.token_mixer(hidden_states=x, attention_mask=attention_mask)
+
+      else:
+        raise NotImplementedError('Unsupported value encountered for `cfg.token_mixer`')
+
       x = x + o
+      x = scaling * self.mlp_norm(x)
+      x = x + self.mlp(x)
 
-    x = scaling * self.mlp_norm(x)
-    x = x + self.mlp(x)
+    # not supported rn
+    elif self.residual_connection == 'mhc':
+      raise NotImplementedError('Manifold-Constrained HyperConnections are currently not supported.')
+
     return x
 
 
@@ -181,7 +190,7 @@ class Transformer(nn.Module):
       token_mixers = cfg.token_mixer.split('+')
       assert len(token_mixers) == 2, 'Only support two token mixers for now'
       assert all(tm in SUPPORTED_TOKEN_MIXERS for tm in token_mixers), (
-        f'Unknown token mixer(s) {token_mixers}, supported: {list(TOKEN_MIXERS.keys())}'
+        f'Unknown token mixer(s) {token_mixers}, supported: {list(SUPPORTED_TOKEN_MIXERS.keys())}'
       )
       layers = []
       for idx in range(cfg.n_layers):

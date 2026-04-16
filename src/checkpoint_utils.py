@@ -1,8 +1,10 @@
+import json
 import os
 import re
-import json
+
 import torch
-import utils
+
+from src import utils
 
 
 def _latest_checkpoint(ckpt_dir: str, prefix: str = 'checkpoint_') -> str | None:
@@ -62,7 +64,7 @@ def maybe_load_checkpoint(cfg):
     #   ckpt_dir = os.path.join(cfg.out_dir, cfg.resume_exp_name)
     # else: # verbatim as it was saved
     #   ckpt_dir = utils.get_exp_dir_path(cfg)
-      
+
     # notice that we can resume from `resume_exp_name`, but save to a different `exp_name`
     resume_exp_name = cfg.resume_exp_name if cfg.resume_exp_name is not None else cfg.exp_name
     ckpt_dir = os.path.join(cfg.out_dir, resume_exp_name)
@@ -72,13 +74,14 @@ def maybe_load_checkpoint(cfg):
       ckpt_path = os.path.join(ckpt_dir, f'ckpt_step_{cfg.resume_step}.pth')
     else:
       ckpt_path = _latest_checkpoint(ckpt_dir, prefix='ckpt_step_')
-    
+
     # load checkpoint on cpu to later avoid OOM when intializing the model on device
     # (an alternative design would be to initialize the model on `meta` device instead)
-    print(f"Loading checkpoint from {ckpt_path}")
+    print(f'Loading checkpoint from {ckpt_path}')
     ckpt = torch.load(ckpt_path, map_location='cpu')
 
   return ckpt
+
 
 def match_state_dict_keys(state_dict: dict, state_dict_orig: dict) -> dict:
   """Modifies the keys of 'state_dict' to match the keys of 'state_dict_orig'.

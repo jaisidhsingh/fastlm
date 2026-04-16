@@ -54,7 +54,14 @@ def init_wandb(cfg):
     if _matching_wandb_run_exists(cfg):
       raise FileExistsError('A run with the same config exists. Aborting.')
 
-  wandb.init(project=cfg.wandb_project, name=cfg.wandb_run_name, dir=cfg.wandb_dir, config=cfg._asdict())
+  wandb.init(
+    project=cfg.wandb_project,
+    mode=cfg.wandb_mode,
+    entity=cfg.wandb_entity,
+    name=cfg.wandb_run_name,
+    dir=cfg.wandb_dir,
+    config=cfg._asdict(),
+  )
 
 
 def log_job_info():

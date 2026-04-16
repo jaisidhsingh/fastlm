@@ -1,11 +1,11 @@
 import os
 import random
+
 import numpy as np
 import torch
+from torch.distributed import destroy_process_group, init_process_group
 
-from torch.distributed import init_process_group, destroy_process_group
-
-from utils import print_master
+from src.utils import print_master
 
 
 def pytorch_setup(cfg):

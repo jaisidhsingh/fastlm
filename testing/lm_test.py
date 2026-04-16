@@ -6,9 +6,9 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 from transformers import AutoTokenizer
 
-from data.datasamplers import StatefulRandomSampler
-from models.transformer import ModelConfig, Transformer
-from utils import get_chincilla_details
+from src.data.datasamplers import StatefulRandomSampler
+from src.models.transformer import ModelConfig, Transformer
+from src.utils import get_chincilla_details
 
 SEED = 0
 DEVICE = 'cuda:0'
@@ -172,12 +172,12 @@ def overfit_one_dummy_batch(token_mixer):
 def overfit_one_nlp_batch(token_mixer):
   tokenizer = AutoTokenizer.from_pretrained(TOKENIZER_PATH)
   cfg = ModelConfig(
-    dim=128,
+    dim=768,
     vocab_size=len(tokenizer),
     seq_len=1024,
-    expand=2.0,
-    n_layers=6,
-    n_heads=4,
+    expand=4.0,
+    n_layers=8,
+    n_heads=8,
     token_mixer=token_mixer,
     hybrid_mixer_ratio=3,
     attn_gate=True,
@@ -191,6 +191,7 @@ def overfit_one_nlp_batch(token_mixer):
   total_params = model.count_params(non_embedding=False)
   print(f'Total params: {total_params}, Non-embedding params: {non_embedding_params}')
 
+  return
   details = get_chincilla_details(total_params)
   num_rows = details['token_count'] // 1024
 
@@ -253,11 +254,11 @@ def overfit_one_nlp_batch(token_mixer):
 
 def main():
   setup()
-  test_pure_attn_lm_forward_pass()
-  test_pure_gdn_lm_forward_pass()
-  test_hybrid_lm_forward_pass()
-  for token_mixer in ['attn', 'gdn', 'gdn+attn']:
-    overfit_one_dummy_batch(token_mixer)
+  # test_pure_attn_lm_forward_pass()
+  # test_pure_gdn_lm_forward_pass()
+  # test_hybrid_lm_forward_pass()
+  for token_mixer in ['gdn+attn']:
+    # overfit_one_dummy_batch(token_mixer)
     overfit_one_nlp_batch(token_mixer)
 
 

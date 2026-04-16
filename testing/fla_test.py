@@ -4,7 +4,7 @@ from time import perf_counter
 import torch
 
 from fla.layers import GatedDeltaNet
-from models.components import RMSNorm
+from src.models.components import RMSNorm
 
 DEVICE = 'cuda:0'
 DTYPE = torch.bfloat16

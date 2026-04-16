@@ -1,20 +1,23 @@
-import torch
+from contextlib import nullcontext
 
+import torch
 from torch import distributed as dist
 from torch.nn import CrossEntropyLoss
 from torch.nn.parallel import DistributedDataParallel as DDP
-from contextlib import nullcontext
 
-from models import get_param_groups
-from optim import intialize_optimizer, initialize_scheduler
-from data.datasets.data_prep_utils import intra_doc_causal_mask
+from src.data.datasets.data_prep_utils import intra_doc_causal_mask
+from src.models import get_param_groups
+from src.optim import initialize_scheduler, intialize_optimizer
 
 
 def _move_to_device(batch, seq_len, device, intra_doc_masking):
   """Slice batch to get inputs and targets, and move them to device."""
 
   inputs = batch['input_ids'][:, :seq_len]
-  targets = batch['input_ids'][:, 1 : (seq_len + 1)]
+  if seq_len == batch['input_ids'].shape[-1]:
+    targets = batch['input_ids'][:, 1:]
+  else:
+    targets = batch['input_ids'][:, 1 : (seq_len + 1)]
 
   if intra_doc_masking:
     # build one mask per example and stack into (bsz, L, L)
@@ -22,7 +25,11 @@ def _move_to_device(batch, seq_len, device, intra_doc_masking):
     attn_mask = torch.stack(masks, dim=0)  # (bsz, L+1, L+1)
     attn_mask = attn_mask[:, :seq_len, :seq_len].contiguous()  # (bsz, L, L)
   else:
-    attn_mask = None
+    attn_mask = (
+      torch.tril(torch.ones(batch['input_ids'].shape[1], batch['input_ids'].shape[1]))
+      .repeat(batch['input_ids'].shape[0], 1, 1)
+      .to(dtype=torch.bool)
+    )
 
   if 'cuda' in device:
     # pin arrays allows to move them to GPU asynchronously (non_blocking=True)
@@ -30,6 +37,7 @@ def _move_to_device(batch, seq_len, device, intra_doc_masking):
     targets = targets.pin_memory().to(device, non_blocking=True)
   else:
     inputs, targets = inputs.to(device), targets.to(device)
+  attn_mask = attn_mask.to(device=device)
 
   return inputs, targets, attn_mask
 
@@ -108,7 +116,9 @@ class TorchEngine(torch.nn.Module):
     with self.ctx:
       output = self.model(inputs, attn_mask)
       logits = getattr(output, 'logits', output)
-      loss = self.criterion(logits.view(-1, logits.size(-1)), targets.view(-1))
+      loss = self.criterion(
+        logits[:, :-1, :].reshape(-1, logits.size(-1)).contiguous(), targets.reshape(-1).contiguous()
+      )
       loss = loss / self.accumulation_steps
 
     # detach for logging (scale up to undo the division above)
@@ -154,7 +164,9 @@ class TorchEngine(torch.nn.Module):
       with self.ctx:
         output = self.model(inputs, attn_mask)
         logits = getattr(output, 'logits', output)
-        loss = self.criterion(logits.view(-1, logits.size(-1)), targets.view(-1))
+        loss = self.criterion(
+          logits[:, :-1, :].reshape(-1, logits.size(-1)).contiguous(), targets.reshape(-1).contiguous()
+        )
 
       if torch.isnan(loss) or loss is None:
         raise ValueError('Validation loss is nan')
@@ -172,6 +184,6 @@ class TorchEngine(torch.nn.Module):
       num_batches = num_batches_tensor.item()
 
     # calculate average loss
-    avg_loss = total_loss.item() / num_batches.item()
+    avg_loss = total_loss / num_batches
 
     return avg_loss

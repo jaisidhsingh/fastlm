@@ -1,5 +1,4 @@
-"""Torch-compilable llama-style RoPE"""
-# thank you, @jonasgeiping!
+# Torch-compilable llama-style RoPE, thank you, @jonasgeiping!
 
 from typing import Tuple
 

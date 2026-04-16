@@ -1,5 +1,3 @@
-"""A script to count number of parameters in a transformer."""
-
 multiple_of = 256  # mlp/glu inner dim is a multiple of this
 
 

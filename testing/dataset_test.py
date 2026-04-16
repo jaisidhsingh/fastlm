@@ -5,8 +5,8 @@ from datasets import load_from_disk
 from torch.utils.data import DataLoader
 from transformers import AutoTokenizer
 
-from data import get_dataloaders
-from data.datasamplers import StatefulRandomSampler
+from src.data import get_dataloaders
+from src.data.datasamplers import StatefulRandomSampler
 
 OWT_PATH = '/fast/jsingh/data/owt-tokenized-9b-train-nn'
 TOKENIZER_PATH = '/home/jsingh/projects/fastlm/tokenizer/better-gpt2'
