@@ -135,26 +135,27 @@ class Block(nn.Module):
   def forward(self, x, freqs_cis, attention_mask):
     # x: (bsz, seqlen, dim)
     if self.residual_connection == 'add':
-      scaling = 1.0 if not self.layer_norm_scaling else math.sqrt(self.layer_id + 1)
-
-      x = scaling * self.token_mixer_norm(x)
+      scaling = 1.0 if not self.layer_norm_scaling else 1 / math.sqrt(self.layer_id + 1)
 
       o = None
       if isinstance(self.token_mixer, GatedAttention):
-        o = self.token_mixer(x, freqs_cis, attention_mask)
+        o = self.token_mixer(scaling * self.token_mixer_norm(x), freqs_cis, attention_mask)
 
       elif isinstance(self.token_mixer, GatedDeltaNet):
         if attention_mask.ndim == 3:
-          o, _, past_key_values = self.token_mixer(hidden_states=x, attention_mask=attention_mask[:, :, 0])
+          o, _, past_key_values = self.token_mixer(
+            hidden_states=scaling * self.token_mixer_norm(x), attention_mask=attention_mask[:, :, 0]
+          )
         elif attention_mask.ndim == 2:
-          o, _, past_key_values = self.token_mixer(hidden_states=x, attention_mask=attention_mask)
+          o, _, past_key_values = self.token_mixer(
+            hidden_states=scaling * self.token_mixer_norm(x), attention_mask=attention_mask
+          )
 
       else:
         raise NotImplementedError('Unsupported value encountered for `cfg.token_mixer`')
 
       x = x + o
-      x = scaling * self.mlp_norm(x)
-      x = x + self.mlp(x)
+      x = x + self.mlp(scaling * self.mlp_norm(x))
 
     # not supported rn
     elif self.residual_connection == 'mhc':

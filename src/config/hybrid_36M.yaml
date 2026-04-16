@@ -73,7 +73,7 @@ wandb_mode: "online"
 wandb_project: "thesis-start"
 wandb_entity: "msc-thesis-jaisidh"
 wandb_dir: "/fast/jsingh/projects/fastlm/wandb"
-wandb_run_name: "hyb_36M_int_testing_0"
+wandb_run_name: "hyb_36M_lns"
 exp_name: "testing_b4_launch"
 out_dir: "/fast/jsingh/projects/fastlm/experiment_logs"
 over_write: True
