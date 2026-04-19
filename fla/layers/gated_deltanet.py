@@ -100,6 +100,8 @@ class GatedDeltaNet(nn.Module):
         conv_bias: bool = False,
         layer_idx: int = None,
         norm_eps: float = 1e-5,
+        glu_gate_v: bool = False,
+        glu_gate_rank: int = None
         **kwargs,
     ) -> GatedDeltaNet:
         super().__init__()
@@ -199,6 +201,13 @@ class GatedDeltaNet(nn.Module):
             self.o_norm = RMSNorm(self.head_v_dim, eps=norm_eps, dtype=torch.float32)
         self.o_proj = nn.Linear(self.value_dim, hidden_size, bias=False)
 
+        if glu_gate_v and glu_gate_rank is not None:
+            self.glu_gate_v = glu_gate_v
+            r = glu_gate_rank
+            self.glu_gate_rank = glu_gate_rank
+            self.v_gate_down = nn.Linear(self.value_dim, r, bias=False)
+            self.v_gate_up   = nn.Linear(r, self.value_dim, bias=False)
+
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -257,6 +266,15 @@ class GatedDeltaNet(nn.Module):
 
         q, k = map(lambda x: rearrange(x, '... (h d) -> ... h d', d=self.head_k_dim), (q, k))
         v = rearrange(v, '... (h d) -> ... h d', d=self.head_v_dim)
+
+        if self.glu_gate_v:
+            v_flat = rearrange(v, 'b t h d -> b t (h d)')
+
+            gate = self.v_gate_up(self.v_gate_down(v_flat))   # (B, T, value_dim)
+            gate = F.silu(gate)
+
+            v_flat = v_flat * gate
+            v = rearrange(v_flat, 'b t (h d) -> b t h d', d=self.head_v_dim)
 
         beta = self.b_proj(hidden_states).sigmoid()
         if self.allow_neg_eigval:
