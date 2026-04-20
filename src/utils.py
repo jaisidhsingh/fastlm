@@ -155,6 +155,7 @@ def get_exp_dir_path(cfg):
   exp_dir = os.path.join(cfg.out_dir, cfg.exp_name)
   if FLAGS.job_idx is not None:  # subfolder for each job in the sweep
     exp_dir = os.path.join(exp_dir, f'job_idx_{FLAGS.job_idx}')
+  return exp_dir
 
 
 def maybe_make_dir(cfg):
