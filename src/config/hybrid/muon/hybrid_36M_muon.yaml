@@ -23,8 +23,8 @@ n_heads: 4
 rms_norm: True
 tie_embeddings: False
 torch_compile: True
-token_mixer: "attn"
-hybrid_mixer_ratio: 1
+token_mixer: "gdn+attn"
+hybrid_mixer_ratio: 3
 layer_norm_scaling: False
 residual_connection: "add"
 attn_gate: True
@@ -37,11 +37,11 @@ gdn_neg_eigval: True
 
 # note: step budget=token_budget/(seq_len * micro_batch_size * grad_accumulation_steps * ddp_world_size)
 # token_budget = num_model_params * 20 (chinchilla optimal for now)
-steps_budget: 1526
+steps_budget: 1374
 
 # note: this is micro batch size if grad_accumulation_steps>1
 # note: with ddp, effective batch size = micro_batch_size * grad_accumulation_steps * ddp_world_size
-micro_batch_size: 32
+micro_batch_size: 64
 grad_accumulation_steps: 8
 
 # note: choose between {float32, float16, bfloat16}
@@ -49,12 +49,11 @@ grad_accumulation_steps: 8
 dtype: "bfloat16"
 
 ### OPTIMIZER config
-optim: "adamw"
-fused_optim: True
+optim: "muon"
 lr: 1.e-3
 weight_decay: 0.1
-beta1: 0.9
-beta2: 0.95
+momentum: 0.9
+ns_steps: 5
 grad_clip: 1.0
 
 scheduler: "warmup_cosine"
@@ -73,7 +72,7 @@ wandb_mode: "online"
 wandb_project: "thesis-start"
 wandb_entity: "msc-thesis-jaisidh"
 wandb_dir: "/fast/jsingh/projects/fastlm/wandb"
-wandb_run_name: "attn_36M_lns"
+wandb_run_name: "hyb_36M_muon"
 exp_name: "testing_b4_launch"
 out_dir: "/fast/jsingh/projects/fastlm/experiment_logs"
 over_write: True

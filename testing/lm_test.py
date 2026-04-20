@@ -39,18 +39,21 @@ def setup():
 @torch.inference_mode()
 def test_pure_attn_lm_forward_pass():
   cfg = ModelConfig(
-    dim=DIM,
-    vocab_size=VOCAB_SIZE,
-    seq_len=SEQ_LEN,
-    expand=EXPAND,
-    n_layers=DEPTH,
-    n_heads=N_HEADS,
+    dim=1024,
+    vocab_size=50304,
+    seq_len=1024,
+    expand=15 / 4,
+    n_layers=8,
+    n_heads=16,
+    mlp='glu',
     token_mixer='attn',
     attn_gate=True,
     attn_qk_norm=True,
   )
   model = Transformer(cfg).to(device=DEVICE, dtype=MODEL_DTYPE)
-  print(model)
+  total_params = model.count_params(non_embedding=False)
+  print(total_params)
+  return
 
   x = torch.randint(low=0, high=VOCAB_SIZE, size=(BATCH_SIZE, SEQ_LEN)).to(device=DEVICE, dtype=INPUT_DTYPE)
   attention_mask = (
@@ -88,12 +91,13 @@ def test_pure_gdn_lm_forward_pass():
 @torch.inference_mode()
 def test_hybrid_lm_forward_pass():
   cfg = ModelConfig(
-    dim=64,
-    vocab_size=1024,
-    seq_len=16,
-    expand=2.0,
+    dim=1024,
+    vocab_size=50304,
+    seq_len=1024,
+    expand=3,
     n_layers=8,
-    n_heads=4,
+    n_heads=16,
+    mlp='glu',
     token_mixer='gdn+attn',
     hybrid_mixer_ratio=3,
     attn_gate=True,
@@ -103,7 +107,9 @@ def test_hybrid_lm_forward_pass():
     gdn_neg_eigval=True,
   )
   model = Transformer(cfg).to(device=DEVICE, dtype=MODEL_DTYPE)
-  print(model)
+  total_params = model.count_params(non_embedding=False)
+  print(total_params)
+  return
 
   x = torch.randint(low=0, high=VOCAB_SIZE, size=(BATCH_SIZE, SEQ_LEN)).to(device=DEVICE, dtype=INPUT_DTYPE)
   attention_mask = (
@@ -172,12 +178,13 @@ def overfit_one_dummy_batch(token_mixer):
 def overfit_one_nlp_batch(token_mixer):
   tokenizer = AutoTokenizer.from_pretrained(TOKENIZER_PATH)
   cfg = ModelConfig(
-    dim=768,
+    dim=256,
     vocab_size=len(tokenizer),
     seq_len=1024,
-    expand=4.0,
+    expand=5,
     n_layers=8,
-    n_heads=8,
+    n_heads=4,
+    mlp='glu',
     token_mixer=token_mixer,
     hybrid_mixer_ratio=3,
     attn_gate=True,
@@ -254,12 +261,12 @@ def overfit_one_nlp_batch(token_mixer):
 
 def main():
   setup()
-  # test_pure_attn_lm_forward_pass()
+  test_pure_attn_lm_forward_pass()
   # test_pure_gdn_lm_forward_pass()
-  # test_hybrid_lm_forward_pass()
-  for token_mixer in ['gdn+attn']:
-    # overfit_one_dummy_batch(token_mixer)
-    overfit_one_nlp_batch(token_mixer)
+  test_hybrid_lm_forward_pass()
+  # for token_mixer in ['attn']:
+  # overfit_one_dummy_batch(token_mixer)
+  # overfit_one_nlp_batch(token_mixer)
 
 
 if __name__ == '__main__':

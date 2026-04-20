@@ -1,6 +1,6 @@
 #!/bin/bash
 
-config="src/config/attn_36M.yaml"
+config="src/config/hybrid_150M.yaml"
 
 cd /home/jsingh/projects/fastlm
 

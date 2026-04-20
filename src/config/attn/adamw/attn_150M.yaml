@@ -1,0 +1,87 @@
+deterministic: False
+seed: 123
+
+### DATA config
+trainset_path: "/fast/jsingh/data/openwebtext/tokenized-9b-gpt2/train"
+vocab_size: 50304
+seq_len: 1024
+intra_doc_masking: False
+sampler: "sequential"
+sampler_seed: null
+num_workers: 4
+eval: True
+validset_path: "/fast/jsingh/data/openwebtext/tokenized-9b-gpt2/val"
+eval_every_steps: 100
+
+### MODEL config
+model: "transformer"
+d_model: 768
+mlp_class: "glu"
+expand: "10/3"
+n_layers: 8
+n_heads: 12
+rms_norm: True
+tie_embeddings: False
+torch_compile: True
+token_mixer: "attn"
+hybrid_mixer_ratio: 1
+layer_norm_scaling: False
+residual_connection: "add"
+attn_gate: True
+attn_qk_norm: True
+gdn_conv_size: 4
+gdn_gate: True
+gdn_neg_eigval: True
+
+### TRAINING RUN config
+
+# note: step budget=token_budget/(seq_len * micro_batch_size * grad_accumulation_steps * ddp_world_size)
+# token_budget = num_model_params * 20 (chinchilla optimal for now)
+steps_budget: 11444
+
+# note: this is micro batch size if grad_accumulation_steps>1
+# note: with ddp, effective batch size = micro_batch_size * grad_accumulation_steps * ddp_world_size
+micro_batch_size: 32
+grad_accumulation_steps: 8
+
+# note: choose between {float32, float16, bfloat16}
+# note: float16 data type will automatically use a GradScaler
+dtype: "bfloat16"
+
+### OPTIMIZER config
+optim: "adamw"
+fused_optim: True
+lr: [1.e-4, 3.e-4, 5.e-4, 7.5e-4, 1.e-3, 3.e-3, 5.e-3, 1.e-2]
+weight_decay: 0.1
+beta1: 0.9
+beta2: 0.95
+grad_clip: 1.0
+
+scheduler: "warmup_cosine"
+warmup_steps: 0.1
+cooldown_steps: null
+lr_start: 0.0
+lr_end: 1.e-5
+lr_end_pct: null
+
+### EXPERIMENT config
+log_every_steps: 1
+print_progress: True
+
+use_wandb: True
+wandb_mode: "offline"
+wandb_project: "sweep"
+wandb_entity: "msc-thesis-jaisidh"
+wandb_dir: "/fast/jsingh/projects/fastlm/wandb"
+wandb_run_name: "attn_150M"
+exp_name: "attn_150M"
+out_dir: "/fast/jsingh/projects/fastlm/experiment_logs"
+over_write: True
+
+resume: False
+resume_step: null
+resume_exp_name: null
+
+save_last_checkpoint: True
+save_intermediate_checkpoints: True
+save_every_steps: 1000

@@ -54,11 +54,15 @@ def init_wandb(cfg):
     if _matching_wandb_run_exists(cfg):
       raise FileExistsError('A run with the same config exists. Aborting.')
 
+  name = cfg.wandb_run_name
+  if FLAGS.job_idx is not None:
+    name = name + f'_job_idx_{FLAGS.job_idx}'
+
   wandb.init(
     project=cfg.wandb_project,
     mode=cfg.wandb_mode,
     entity=cfg.wandb_entity,
-    name=cfg.wandb_run_name,
+    name=name,
     dir=cfg.wandb_dir,
     config=cfg._asdict(),
   )
@@ -81,7 +85,7 @@ def log_job_info():
 
 def _matching_wandb_run_exists(cfg):
   """Check for runs on wandb with the same config. Return True if such run exists."""
-
+  """
   api = wandb.Api()
   runs = api.runs(f'ajnico/{cfg.wandb_project}')
 
@@ -142,7 +146,7 @@ def _matching_wandb_run_exists(cfg):
     if all(math.isclose(v, run.config.get(k), rel_tol=1e-5, abs_tol=1e-5) for k, v in float_config.items()):
       print(f'Found matching wandb run with ID: {run.id}')
       return True
-
+  """
   return False
 
 
