@@ -126,6 +126,9 @@ class GatedDeltaNet(nn.Module):
     self.value_dim = int(self.num_v_heads * self.head_v_dim)
     self.layer_idx = layer_idx
 
+    self.glu_gate_v = glu_gate_v
+    self.glu_gate_rank = glu_gate_rank
+
     # Consistency check: Ensure expand_v produces integer values
     if not math.isclose(self.num_v_heads * self.head_dim * expand_v, self.value_dim, rel_tol=1e-5):
       raise ValueError(
@@ -200,12 +203,9 @@ class GatedDeltaNet(nn.Module):
       self.o_norm = RMSNorm(self.head_v_dim, eps=norm_eps, dtype=torch.float32)
     self.o_proj = nn.Linear(self.value_dim, hidden_size, bias=False)
 
-    if glu_gate_v and glu_gate_rank is not None:
-      self.glu_gate_v = glu_gate_v
-      r = glu_gate_rank
-      self.glu_gate_rank = glu_gate_rank
-      self.v_gate_down = nn.Linear(self.value_dim, r, bias=False)
-      self.v_gate_up = nn.Linear(r, self.value_dim, bias=False)
+    if self.glu_gate_v and self.glu_gate_rank is not None:
+      self.v_gate_down = nn.Linear(self.value_dim, self.glu_gate_rank, bias=False)
+      self.v_gate_up = nn.Linear(self.glu_gate_rank, self.value_dim, bias=False)
 
   def forward(
     self,
