@@ -2,10 +2,10 @@
 executable=/home/jsingh/projects/fastlm/cluster/single_gpu/condor.sh
 
 # Hyperparmeters are specified in a YAML configuration file
-config=src/config/hybrid/adamw/hybrid_36M.yaml
+config=src/config/hybrid/adamw/hybrid_150M.yaml
 
 # Queue as many jobs as points in the hyperaparameter grid
-n_jobs=8
+n_jobs=13
 
 # Pass arguments to the executable
 arguments = $(config) $(Process)

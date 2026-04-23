@@ -51,7 +51,7 @@ dtype: "bfloat16"
 ### OPTIMIZER config
 optim: "adamw"
 fused_optim: True
-lr: [1.e-4, 3.e-4, 5.e-4, 7.5e-4, 1.e-3, 3.e-3, 5.e-3, 1.e-2]
+lr: [2.e-3, 2.e-2, 5.e-2, 1.e-1, 2.e-1]
 weight_decay: 0.1
 beta1: 0.9
 beta2: 0.95
@@ -73,8 +73,8 @@ wandb_mode: "offline"
 wandb_project: "sweep"
 wandb_entity: "msc-thesis-jaisidh"
 wandb_dir: "/fast/jsingh/projects/fastlm/wandb"
-wandb_run_name: "hybrid_36M"
-exp_name: "hybrid_36M"
+wandb_run_name: "hybrid_36M_r"
+exp_name: "hybrid_36M_r"
 out_dir: "/fast/jsingh/projects/fastlm/experiment_logs"
 over_write: True
 
