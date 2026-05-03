@@ -27,6 +27,8 @@ class ModelConfig:
   token_mixer: str = 'gdn+attn'
   hybrid_mixer_ratio: int = 3
   # means 3:1 (one attention after every 3 gdn layers, type before the + symbol is the "every ratio layers")
+  token_mixer_pattern: str = None
+  # use this for more fine-grained control over layer arrangement
   layer_norm_scaling: bool = False
   residual_connection: str = 'add'
   attn_gate: bool = True
@@ -173,7 +175,7 @@ class Transformer(nn.Module):
       raise ValueError('dim must be divisible by n_heads')
 
     self.embed_tokens = nn.Embedding(cfg.vocab_size, cfg.dim)
-    self.layers = self.prepare_layers(cfg)
+    self.layers = self._prepare_layers(cfg)
     self.out_norm = RMSNorm(cfg.dim, cfg.rmsnorm_eps)
     self.lm_head = nn.Linear(cfg.dim, cfg.vocab_size, bias=False)
 
@@ -186,25 +188,45 @@ class Transformer(nn.Module):
     if cfg.tie_embeddings:
       self.tie_weights()
 
-  def prepare_layers(self, cfg):
-    if '+' in cfg.token_mixer:
-      token_mixers = cfg.token_mixer.split('+')
-      assert len(token_mixers) == 2, 'Only support two token mixers for now'
-      assert all(tm in SUPPORTED_TOKEN_MIXERS for tm in token_mixers), (
-        f'Unknown token mixer(s) {token_mixers}, supported: {list(SUPPORTED_TOKEN_MIXERS.keys())}'
-      )
-      layers = []
-      for idx in range(cfg.n_layers):
-        if (idx + 1) % (cfg.hybrid_mixer_ratio + 1) == 0:
-          token_mixer_type = token_mixers[-1]
-        else:
-          token_mixer_type = token_mixers[0]
-        layers.append(Block(idx, token_mixer_type, cfg))
+  def _prepare_layers(self, cfg):
+    if cfg.token_mixer_pattern is None:
+      if '+' in cfg.token_mixer:
+        token_mixers = cfg.token_mixer.split('+')
+        assert len(token_mixers) == 2, 'Only support two token mixers for now'
+        assert all(tm in SUPPORTED_TOKEN_MIXERS for tm in token_mixers), (
+          f'Unknown token mixer(s) {token_mixers}, supported: {list(SUPPORTED_TOKEN_MIXERS.keys())}'
+        )
+        layers = []
+        for idx in range(cfg.n_layers):
+          if (idx + 1) % (cfg.hybrid_mixer_ratio + 1) == 0:
+            token_mixer_type = token_mixers[-1]
+          else:
+            token_mixer_type = token_mixers[0]
+          layers.append(Block(idx, token_mixer_type, cfg))
+
+      else:
+        layers = []
+        for idx in range(cfg.n_layers):
+          layers.append(Block(idx, cfg.token_mixer, cfg))
 
     else:
+      # here's the pattern we like: "(gdn,gdn,gdn,attn)..."
+      # the "..." means repeated enough times till `n_layers` is reached
+      # the number of comma-separated modes in the parenthesis should be perfectly divide `n_layers`
+      block_pattern = cfg.token_mixer_pattern.split('...')[0][1:-1].split(',')
+      assert cfg.n_layers % len(block_pattern) == 0, (
+        'Size of a block in cfg.token_mixer_pattern must perfectly divide cfg.n_layers'
+      )
+      num_repeats = int(cfg.n_layers / len(block_pattern))
+
       layers = []
-      for idx in range(cfg.n_layers):
-        layers.append(Block(idx, cfg.token_mixer, cfg))
+      idx = 0
+      for i in range(num_repeats):
+        for token_mixer_type in block_pattern:
+          layers.append(Block(idx, token_mixer_type, cfg))
+          idx += 1
+
+      assert idx == cfg.n_layers, 'Error in creating layers from cfg.token_mixer_pattern'
 
     return nn.ModuleList(layers)
 

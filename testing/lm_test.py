@@ -91,15 +91,16 @@ def test_pure_gdn_lm_forward_pass():
 @torch.inference_mode()
 def test_hybrid_lm_forward_pass():
   cfg = ModelConfig(
-    dim=1024,
+    dim=256,
     vocab_size=50304,
     seq_len=1024,
-    expand=3,
+    expand=4,
     n_layers=8,
-    n_heads=16,
+    n_heads=4,
     mlp='glu',
-    token_mixer='gdn+attn',
-    hybrid_mixer_ratio=3,
+    token_mixer='gdn+attn',  # won't be used if token_mixer_pattern is not None
+    hybrid_mixer_ratio=3,  # won't be used if token_mixer_pattern is not None
+    token_mixer_pattern='(attn,gdn,gdn,gdn)...',
     attn_gate=True,
     attn_qk_norm=True,
     gdn_conv_size=4,
@@ -107,6 +108,7 @@ def test_hybrid_lm_forward_pass():
     gdn_neg_eigval=True,
   )
   model = Transformer(cfg).to(device=DEVICE, dtype=MODEL_DTYPE)
+  print(model)
   total_params = model.count_params(non_embedding=False)
   print(total_params)
   return
@@ -261,7 +263,7 @@ def overfit_one_nlp_batch(token_mixer):
 
 def main():
   setup()
-  test_pure_attn_lm_forward_pass()
+  # test_pure_attn_lm_forward_pass()
   # test_pure_gdn_lm_forward_pass()
   test_hybrid_lm_forward_pass()
   # for token_mixer in ['attn']:

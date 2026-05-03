@@ -1,6 +1,6 @@
 #!/bin/bash
 
-config="src/config/hybrid_150M.yaml"
+config="src/config/hybrid/adamw/hybrid_reverse_36M.yaml"
 
 cd /home/jsingh/projects/fastlm
 
