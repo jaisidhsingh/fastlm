@@ -3,6 +3,7 @@ import random
 import torch
 from datasets import load_from_disk
 from torch.utils.data import DataLoader
+from torch.utils.flop_counter import FlopCounterMode
 from tqdm import tqdm
 from transformers import AutoTokenizer
 
@@ -261,14 +262,94 @@ def overfit_one_nlp_batch(token_mixer):
   print(f'Overfitting one NLP batch for [{token_mixer}] successful\n')
 
 
+def count_flops_with_compile(token_mixer):
+  tokenizer = AutoTokenizer.from_pretrained(TOKENIZER_PATH)
+  cfg = ModelConfig(
+    dim=768,
+    vocab_size=len(tokenizer),
+    seq_len=1024,
+    expand=8 / 3 if token_mixer != 'attn' else 10 / 3,
+    n_layers=8,
+    n_heads=12,
+    mlp='glu',
+    token_mixer=token_mixer,
+    hybrid_mixer_ratio=3 if token_mixer != 'attn' else 1,
+    attn_gate=True,
+    attn_qk_norm=True,
+    gdn_conv_size=4,
+    gdn_gate=True,
+    gdn_neg_eigval=True,
+  )
+  model = Transformer(cfg).to(device=DEVICE, dtype=MODEL_DTYPE)
+  non_embedding_params = model.count_params()
+  total_params = model.count_params(non_embedding=False)
+  print(f'Total params: {total_params}, Non-embedding params: {non_embedding_params}')
+
+  details = get_chincilla_details(total_params)
+  num_rows = details['token_count'] // 1024
+
+  dataset = load_from_disk(OWT_PATH)
+  indices = random.sample(range(len(dataset)), num_rows)
+  dataset = dataset.select(indices)
+  sampler = StatefulRandomSampler(data_source=dataset, batch_size=BATCH_SIZE, shuffle=True, seed=SEED)
+
+  def collate_fn(batch):
+    return torch.stack([torch.tensor(item['tokens'], dtype=torch.long) for item in batch])
+
+  loader = DataLoader(
+    dataset,
+    sampler=sampler,
+    batch_size=BATCH_SIZE,
+    collate_fn=collate_fn,
+  )
+
+  model = torch.compile(model)
+
+  batch = next(iter(loader)).to(device=DEVICE, dtype=INPUT_DTYPE)
+  attention_mask = (
+    torch.tril(torch.ones(batch.shape[1], batch.shape[1]))
+    .repeat(batch.shape[0], 1, 1)
+    .to(device=DEVICE, dtype=torch.bool)
+  )
+  optimizer = torch.optim.AdamW(model.parameters(), lr=LR)
+
+  for i in range(2):
+    flop_counter = FlopCounterMode(model, display=False, depth=2)
+    with flop_counter:
+      optimizer.zero_grad()
+
+      with torch.amp.autocast(DEVICE):
+        logits = model(batch, attention_mask)
+
+      vocab_size = logits.shape[-1]
+      labels = batch.clone()[:, 1:].reshape(-1).contiguous()
+      logits = logits[:, :-1, :].reshape(-1, vocab_size).contiguous()
+
+      loss = torch.nn.functional.cross_entropy(logits, labels)
+      loss.backward()
+      optimizer.step()
+      if i == 0:
+        print('first step right after torch.compile')
+      else:
+        print('second step after one compiled backward pass')
+      print('flops in M', flop_counter.get_total_flops() / 1e6, 'batch size', BATCH_SIZE)
+      print('\n')
+
+
 def main():
   setup()
   # test_pure_attn_lm_forward_pass()
   # test_pure_gdn_lm_forward_pass()
-  test_hybrid_lm_forward_pass()
+  # test_hybrid_lm_forward_pass()
   # for token_mixer in ['attn']:
   # overfit_one_dummy_batch(token_mixer)
   # overfit_one_nlp_batch(token_mixer)
+
+  print('hybrid')
+  count_flops_with_compile('gdn+attn')
+
+  print('attn')
+  count_flops_with_compile('attn')
 
 
 if __name__ == '__main__':
