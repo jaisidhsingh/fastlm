@@ -48,22 +48,24 @@ The output should look like this:
 
 """
 
-import os
 import multiprocessing as mp
+import os
 
 # # This will override FileLock globally to use SoftFileLock.
 # # Uncomment on filesystems do not support FileLock.
-# import filelock
-# filelock.FileLock = filelock.SoftFileLock
-# os.environ["SOFT_FILELOCK"] = "1"
+import filelock
 
-from absl import app, flags
+filelock.FileLock = filelock.SoftFileLock
+os.environ['SOFT_FILELOCK'] = '1'
+
 from functools import partial
 from timeit import default_timer as timer
-from datasets import Dataset, load_from_disk, load_dataset
+
+from absl import app, flags
+from datasets import Dataset, load_dataset, load_from_disk
 from transformers import AutoTokenizer
 
-from data.datasets.data_prep_utils import concat_chunck
+from src.data.datasets.data_prep_utils import concat_chunck
 
 # Linux’s default “fork” start method inherits open handles (semaphores/CWD)
 # in the pymp-* temp directory, leading to OSError on cleanup.
@@ -89,7 +91,7 @@ flags.DEFINE_integer('nrows', None, 'Number of rows to download. Ignored if `dow
 flags.DEFINE_string('tokenizer', 'gpt2', 'A valid tokenizer for transformers.AutoTokenizer.')
 flags.DEFINE_integer('seq_length', None, 'Sequence length for chunking the dataset. Ignored if `chunk` is False.')
 
-flags.DEFINE_boolean('split_train_valid', True, 'Split the dataset into train and valid sets after chunking.')
+flags.DEFINE_boolean('split_train_valid', False, 'Split the dataset into train and valid sets after chunking.')
 flags.DEFINE_integer('n_tokens_valid', None, 'Number of tokens in the validation set. Ignored if `chunk` is False.')
 
 flags.DEFINE_boolean('save_raw', False, 'Save the raw dataset to disk. Ignored if `download` is False.')
