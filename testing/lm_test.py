@@ -184,7 +184,7 @@ def overfit_one_nlp_batch(token_mixer):
     dim=256,
     vocab_size=len(tokenizer),
     seq_len=1024,
-    expand=5,
+    expand=3,
     n_layers=8,
     n_heads=4,
     mlp='glu',
@@ -201,7 +201,7 @@ def overfit_one_nlp_batch(token_mixer):
   total_params = model.count_params(non_embedding=False)
   print(f'Total params: {total_params}, Non-embedding params: {non_embedding_params}')
 
-  return
+  # return
   details = get_chincilla_details(total_params)
   num_rows = details['token_count'] // 1024
 
@@ -343,13 +343,7 @@ def main():
   # test_hybrid_lm_forward_pass()
   # for token_mixer in ['attn']:
   # overfit_one_dummy_batch(token_mixer)
-  # overfit_one_nlp_batch(token_mixer)
-
-  print('hybrid')
-  count_flops_with_compile('gdn+attn')
-
-  print('attn')
-  count_flops_with_compile('attn')
+  overfit_one_nlp_batch('gdn')
 
 
 if __name__ == '__main__':
