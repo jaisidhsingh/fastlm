@@ -1,9 +1,12 @@
 """Pretrain a Transformer on language modeling."""
 
+import time
 from collections import defaultdict
 from contextlib import suppress
 
+import torch
 from absl import app, flags
+from torch.utils.flop_counter import FlopCounterMode
 
 from src import utils
 from src.checkpoint_utils import maybe_load_checkpoint, save_checkpoint
@@ -72,25 +75,26 @@ def main(_):
     if step > steps_budget and is_step:
       break
 
-    if micro_step == 1:
-      flop_counter = torch.utils.flop_counter.FlopCounterMode(model, display=False, depth=2)
-    else:
-      flop_counter = suppress
+    # if micro_step == 1 and cfg.count_flops:
+    #   flop_counter = FlopCounterMode(model, display=False, depth=2)
+    # else:
+    #   flop_counter = suppress()
 
-    torch.cuda.synchronize()
-    t0 = time.perf_counter()
+    if cfg.sync_and_time:
+      torch.cuda.synchronize()
+      t0 = time.perf_counter()
 
     # Train
-    with flop_counter():
-      train_loss = engine.step(micro_batch)
-      if microstep == 1:
-        flops_per_step = flop_counter.get_total_flops()
-
+    # with flop_counter:
+    # if micro_step == 1:
+    # flops_per_step = flop_counter.get_total_flops()
+    train_loss = engine.step(micro_batch)
     train_loss_array.append(train_loss)
 
-    torch.cuda.synchronize()
-    t1 = time.perf_counter()
-    step_time = t1 - t0
+    if cfg.sync_and_time:
+      torch.cuda.synchronize()
+      t1 = time.perf_counter()
+      step_time = t1 - t0
 
     # Eval
     valid_loss = None
@@ -98,7 +102,9 @@ def main(_):
       print_master('Evaluating on validation set')
       valid_loss = engine.eval(validloader)
 
-    throughput_metrics = (step_time, flops_per_step)
+    throughput_metrics = None
+    if cfg.sync_and_time:
+      throuhput_metrics = (step_time, flops_per_step)
 
     # Log
     if master_process and step % cfg.log_every_steps == 0 and is_step:

@@ -47,8 +47,8 @@ def load_config(path):
 
 def init_wandb(cfg):
   """Initalizes a wandb run"""
-  os.environ['WANDB__SERVICE_WAIT'] = '600'
-  os.environ['WANDB_SILENT'] = 'true'
+  # os.environ['WANDB__SERVICE_WAIT'] = '600'
+  # os.environ['WANDB_SILENT'] = 'true'
 
   if getattr(cfg, 'check_existing_wandb_run', False):
     if _matching_wandb_run_exists(cfg):
@@ -189,11 +189,6 @@ def log(
   elif isinstance(train_loss_array, torch.Tensor):
     train_loss_avg = train_loss_array.item()
 
-  if throughput_metrics is not None:
-    step_time, flops_per_step = throughput_metrics
-
-  tokens = micro_step * cfg.micro_batch_size * cfg.seq_len * world_size
-  tokens_per_step = tokens / step_time
   new_metrics = {
     'micro_step': micro_step,
     'step': micro_step // cfg.grad_accumulation_steps,
@@ -203,11 +198,20 @@ def log(
     'train/loss_avg': train_loss_avg,
     'train/ppl': math.exp(train_loss),
     'train/ppl_avg': math.exp(train_loss_avg),
-    'throughput/step_time': step_time,
-    'throughput/tokens_per_sec': tokens_per_sec,
-    'throughput/mfu': (flops_per_step / step_time) / 312e12,
-    'throughput/flops_per_step': flops_per_step,
   }
+  if throughput_metrics is not None:
+    step_time, flops_per_step = throughput_metrics
+    tokens_this_step = cfg.micro_batch_size * cfg.seq_len * cfg.grad_acc * world_size
+    tokens_per_sec = tokens_this_step / step_time
+
+    new_metrics.update(
+      {
+        'throughput/step_time': step_time,
+        'throughput/tokens_per_sec': tokens_per_sec,
+        # 'throughput/mfu': (flops_per_step / step_time) / 312e12,
+        # 'throughput/flops_per_step': flops_per_step,
+      }
+    )
 
   if valid_loss is not None:
     new_metrics['valid/loss'] = valid_loss

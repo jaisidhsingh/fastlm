@@ -11,14 +11,18 @@ from src.data.datasamplers import StatefulRandomSampler
 OWT_PATH = '/fast/jsingh/data/owt-tokenized-9b-train-nn'
 TOKENIZER_PATH = '/home/jsingh/projects/fastlm/tokenizer/better-gpt2'
 
+NEMO_PATH = '/fast/jsingh/data/nemotron-cc-sample-mtsynth/tokenized_gpt2/ctx_4096/train'
+
 
 def view_dataset():
-  dataset = load_from_disk(OWT_PATH)
+  dataset = load_from_disk(NEMO_PATH)
+  print(dataset[0])
+  return
   tokenizer = AutoTokenizer.from_pretrained(TOKENIZER_PATH)
   sampler = StatefulRandomSampler(data_source=dataset, batch_size=16, shuffle=True, seed=0)
 
-  def collate_fn(batch):
-    return torch.stack([torch.tensor(item['tokens'], dtype=torch.long) for item in batch])
+  # def collate_fn(batch):
+  #   return torch.stack([torch.tensor(item['tokens'], dtype=torch.long) for item in batch])
 
   loader = DataLoader(
     dataset,

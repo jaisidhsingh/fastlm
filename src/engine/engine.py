@@ -4,6 +4,7 @@ import torch
 from torch import distributed as dist
 from torch.nn import CrossEntropyLoss
 from torch.nn.parallel import DistributedDataParallel as DDP
+from torch.utils.flop_counter import FlopCounterMode
 
 from src.data.datasets.data_prep_utils import intra_doc_causal_mask
 from src.models import get_param_groups
@@ -13,11 +14,12 @@ from src.optim import initialize_scheduler, intialize_optimizer
 def _move_to_device(batch, seq_len, device, intra_doc_masking):
   """Slice batch to get inputs and targets, and move them to device."""
 
-  inputs = batch['input_ids'][:, :seq_len]
-  if seq_len == batch['input_ids'].shape[-1]:
-    targets = batch['input_ids'][:, 1:]
-  else:
-    targets = batch['input_ids'][:, 1 : (seq_len + 1)]
+  inputs = batch['input_ids'][:, :seq_len]  # WE WILL CHOP OFF THE LAST ONE FROM THE LOGITS
+  targets = batch['input_ids'][:, 1:seq_len]  # WE ALWAYS MAKE LABELS FROM INPUTS: HF-STYLE
+  # if seq_len == batch['input_ids'].shape[-1]:
+  #   targets = batch['input_ids'][:, 1:]
+  # else:
+  #   targets = batch['input_ids'][:, 1 : (seq_len + 1)]
 
   if intra_doc_masking:
     # build one mask per example and stack into (bsz, L, L)
@@ -25,11 +27,7 @@ def _move_to_device(batch, seq_len, device, intra_doc_masking):
     attn_mask = torch.stack(masks, dim=0)  # (bsz, L+1, L+1)
     attn_mask = attn_mask[:, :seq_len, :seq_len].contiguous()  # (bsz, L, L)
   else:
-    attn_mask = (
-      torch.tril(torch.ones(batch['input_ids'].shape[1], batch['input_ids'].shape[1]))
-      .repeat(batch['input_ids'].shape[0], 1, 1)
-      .to(dtype=torch.bool)
-    )
+    attn_mask = torch.tril(torch.ones(seq_len, seq_len)).repeat(batch['input_ids'].shape[0], 1, 1).to(dtype=torch.bool)
 
   if 'cuda' in device:
     # pin arrays allows to move them to GPU asynchronously (non_blocking=True)
@@ -97,6 +95,9 @@ class TorchEngine(torch.nn.Module):
       self.optimizer.load_state_dict(ckpt['optimizer'])
       self.scheduler.load_state_dict(ckpt['scheduler'])
       self.scaler.load_state_dict(ckpt['scaler'])
+
+    # if cfg.count_flops:
+    #   flop_counter = FlopCounterMode(self.model, display=False)
 
   def step(self, batch):
     """Wraps a fwd pass, bwd pass, and optimization step."""
