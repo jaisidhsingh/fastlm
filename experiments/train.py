@@ -1,15 +1,17 @@
 """Pretrain a Transformer on language modeling."""
 
-from absl import app, flags
 from collections import defaultdict
+from contextlib import suppress
+
+from absl import app, flags
 
 from src import utils
-from src.utils import print_master
-from src.torch_utils import pytorch_setup, destroy_ddp
+from src.checkpoint_utils import maybe_load_checkpoint, save_checkpoint
 from src.data import get_dataloaders
-from src.checkpoint_utils import save_checkpoint, maybe_load_checkpoint
-from src.models import construct_model
 from src.engine import TorchEngine
+from src.models import construct_model
+from src.torch_utils import destroy_ddp, pytorch_setup
+from src.utils import print_master
 
 flags.DEFINE_string('config', 'config/config.yaml', 'Path to config.yaml file.')
 flags.DEFINE_integer('job_idx', None, 'Job idx for job-array sweeps. From 0 to n-1.')
@@ -61,6 +63,7 @@ def main(_):
   # Bookkeeping
   metrics = defaultdict(list)
   train_loss_array = []
+  flops_per_step = 0
 
   # Training
   for micro_step, micro_batch in enumerate(trainloader, micro_step_start + 1):
@@ -69,9 +72,25 @@ def main(_):
     if step > steps_budget and is_step:
       break
 
+    if micro_step == 1:
+      flop_counter = torch.utils.flop_counter.FlopCounterMode(model, display=False, depth=2)
+    else:
+      flop_counter = suppress
+
+    torch.cuda.synchronize()
+    t0 = time.perf_counter()
+
     # Train
-    train_loss = engine.step(micro_batch)
+    with flop_counter():
+      train_loss = engine.step(micro_batch)
+      if microstep == 1:
+        flops_per_step = flop_counter.get_total_flops()
+
     train_loss_array.append(train_loss)
+
+    torch.cuda.synchronize()
+    t1 = time.perf_counter()
+    step_time = t1 - t0
 
     # Eval
     valid_loss = None
@@ -79,9 +98,21 @@ def main(_):
       print_master('Evaluating on validation set')
       valid_loss = engine.eval(validloader)
 
+    throughput_metrics = (step_time, flops_per_step)
+
     # Log
     if master_process and step % cfg.log_every_steps == 0 and is_step:
-      utils.log(cfg, metrics, micro_step, train_loss, train_loss_array, valid_loss, engine.optimizer, world_size)
+      utils.log(
+        cfg,
+        metrics,
+        micro_step,
+        train_loss,
+        train_loss_array,
+        valid_loss,
+        engine.optimizer,
+        world_size,
+        throughput_metrics,
+      )
       train_loss_array = []
 
     # Checkpoint

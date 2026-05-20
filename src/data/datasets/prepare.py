@@ -87,6 +87,7 @@ flags.DEFINE_list('dataset_columns', None, 'Columns to keep from the dataset.')
 
 flags.DEFINE_boolean('streaming', False, 'Download the dataset in streaming mode. Ignored if `download` is False.')
 flags.DEFINE_integer('nrows', None, 'Number of rows to download. Ignored if `download` is False.')
+flags.DEFINE_integer('nrows_tokenize', None, 'Number of rows to tokenize. If set to `None` then all rows are used.')
 
 flags.DEFINE_string('tokenizer', 'gpt2', 'A valid tokenizer for transformers.AutoTokenizer.')
 flags.DEFINE_integer('seq_length', None, 'Sequence length for chunking the dataset. Ignored if `chunk` is False.')
@@ -181,10 +182,15 @@ def main(_):
         os.path.join(out_path, 'raw_dataset'),
       )
 
+    # If one wants to tokenize a subset
+    if FLAGS.nrows_tokenize is not None:
+      nrows_tokenize = int(FLAGS.nrows_tokenize)
+      raw_ds = raw_ds.take(nrows_tokenize)
+
     # Shuffle so that multiproc has shards of similar size
     raw_ds = raw_ds.shuffle(seed=1996)
 
-    tokenizer = AutoTokenizer.from_pretrained(FLAGS.tokenizer)
+    tokenizer = AutoTokenizer.from_pretrained("/home/jsingh/projects/fastlm/tokenizer/better-gpt2")
     print(f'Length of tokenizer = {len(tokenizer)}')
 
     # Set an high maximum number of tokens that the tokenizer can handle

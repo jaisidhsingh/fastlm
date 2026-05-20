@@ -178,15 +178,16 @@ def overfit_one_dummy_batch(token_mixer):
   print(f'Overfitting one dummy batch for [{token_mixer}] successful\n')
 
 
-def overfit_one_nlp_batch(token_mixer):
+def overfit_one_nlp_batch(token_mixer, dim, depth, heads, expands):
   tokenizer = AutoTokenizer.from_pretrained(TOKENIZER_PATH)
   cfg = ModelConfig(
-    dim=256,
+    dim=dim,
     vocab_size=len(tokenizer),
-    seq_len=1024,
-    expand=3,
-    n_layers=8,
-    n_heads=4,
+    seq_len=4096,
+    tie_embeddings=True,
+    expand=expands,
+    n_layers=depth,
+    n_heads=heads,
     mlp='glu',
     token_mixer=token_mixer,
     hybrid_mixer_ratio=3,
@@ -200,8 +201,8 @@ def overfit_one_nlp_batch(token_mixer):
   non_embedding_params = model.count_params()
   total_params = model.count_params(non_embedding=False)
   print(f'Total params: {total_params}, Non-embedding params: {non_embedding_params}')
+  return
 
-  # return
   details = get_chincilla_details(total_params)
   num_rows = details['token_count'] // 1024
 
@@ -284,6 +285,7 @@ def count_flops_with_compile(token_mixer):
   non_embedding_params = model.count_params()
   total_params = model.count_params(non_embedding=False)
   print(f'Total params: {total_params}, Non-embedding params: {non_embedding_params}')
+  return
 
   details = get_chincilla_details(total_params)
   num_rows = details['token_count'] // 1024
@@ -337,13 +339,19 @@ def count_flops_with_compile(token_mixer):
 
 
 def main():
+  widths = [384, 512, 768, 1024, 1536]
+  depths = [12, 16, 22, 28, 28]
+  heads = [8, 8, 8, 16, 16]
+  expands = [2 for i in range(5)]
   setup()
-  # test_pure_attn_lm_forward_pass()
-  # test_pure_gdn_lm_forward_pass()
-  # test_hybrid_lm_forward_pass()
-  # for token_mixer in ['attn']:
-  # overfit_one_dummy_batch(token_mixer)
-  overfit_one_nlp_batch('gdn')
+
+  for w, d, h, e in zip(widths, depths, heads, expands):
+    # test_pure_attn_lm_forward_pass()
+    # test_pure_gdn_lm_forward_pass()
+    # test_hybrid_lm_forward_pass()
+    # for token_mixer in ['attn']:
+    # overfit_one_dummy_batch(token_mixer)
+    overfit_one_nlp_batch('gdn', w, d, h, e)
 
 
 if __name__ == '__main__':
