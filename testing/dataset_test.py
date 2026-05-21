@@ -35,9 +35,20 @@ def view_dataset():
   print(batch.shape)
 
 
-def main():
-  view_dataset()
+p_to_tps_map = {300: 37000, 150: 72000, 50: 106000, 20: 180000, 10: 250000}
+
+
+def get_chincilla_tokens(params_in_m):
+  return 20 * params_in_m * 1e6
+
+
+def get_time_to_train(params_in_m):
+  tps = p_to_tps_map[params_in_m]
+  s = get_chincilla_tokens(params_in_m) / tps
+  return s / 3600
 
 
 if __name__ == '__main__':
-  main()
+  for p in p_to_tps_map.keys():
+    t = get_time_to_train(p)
+    print(f'GPU hours needed to train a {p}M dense LLM', t)

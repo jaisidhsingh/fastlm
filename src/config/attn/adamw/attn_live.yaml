@@ -5,24 +5,24 @@ seed: 123
 trainset_path: "/fast/jsingh/data/openwebtext/tokenized-9b-gpt2/train"
 # trainset_path: "/fast/jsingh/data/nemotron-cc-sample-mtsynth/tokenized_gpt2/ctx_4096/train"
 vocab_size: 50304
-seq_len: 4096
+seq_len: 1024
 intra_doc_masking: False
 sampler: "sequential"
 sampler_seed: null
-sync_and_time: False
+measure_throughput: True
 num_workers: 4
 eval: True
 # validset_path: "/fast/jsingh/data/nemotron-cc-sample-mtsynth/tokenized_gpt2/ctx_4096/valid"
 validset_path: "/fast/jsingh/data/openwebtext/tokenized-9b-gpt2/val"
-eval_every_steps: 10
+eval_every_steps: 100
 
 ### MODEL config
 model: "transformer"
-d_model: 384
+d_model: 128
 mlp_class: "glu"
 expand: "3.0"
-n_layers: 12
-n_heads: 8
+n_layers: 6
+n_heads: 4
 rms_norm: True
 tie_embeddings: True
 torch_compile: True
@@ -40,12 +40,12 @@ gdn_neg_eigval: True
 
 # note: step budget=token_budget/(seq_len * micro_batch_size * grad_accumulation_steps * ddp_world_size)
 # token_budget = num_model_params * 20 (chinchilla optimal for now)
-steps_budget: 476
+steps_budget: 10000
 
 # note: this is micro batch size if grad_accumulation_steps>1
 # note: with ddp, effective batch size = micro_batch_size * grad_accumulation_steps * ddp_world_size
-micro_batch_size: 64
-grad_accumulation_steps: 8
+micro_batch_size: 84
+grad_accumulation_steps: 1
 
 # note: choose between {float32, float16, bfloat16}
 # note: float16 data type will automatically use a GradScaler
@@ -72,13 +72,13 @@ lr_end_pct: null
 log_every_steps: 1
 print_progress: True
 
-use_wandb: True
+use_wandb: False
 wandb_mode: "online"
 wandb_project: "throughput"
 wandb_entity: "msc-thesis-jaisidh"
 wandb_dir: "/fast/jsingh/projects/fastlm/wandb"
-wandb_run_name: "attn_50M_ctx1024_b64_dbg_gradacc8"
-exp_name: "attn_50M_ctx1024_b64_dbg_gradacc8"
+wandb_run_name: "attn_150M_test_gas=1"
+exp_name: "attn_150M_test_gas=1"
 out_dir: "/fast/jsingh/projects/fastlm/experiment_logs"
 over_write: True
 

@@ -12,6 +12,13 @@ from absl import flags
 FLAGS = flags.FLAGS
 
 
+GPU_PEAK_FLOPS_PER_SEC_MAP = {
+  'NVIDIA A100-SXM4-80GB': 312e12,
+  'NVIDIA H100 80GB HBM3': 989e12,
+  'NVIDIA H100': 835e12,
+}
+
+
 def get_chincilla_details(param_count):
   return {'token_count': 20 * param_count, 'flop_count': 6 * 20 * (param_count**2)}
 
@@ -201,15 +208,20 @@ def log(
   }
   if throughput_metrics is not None:
     step_time, flops_per_step = throughput_metrics
-    tokens_this_step = cfg.micro_batch_size * cfg.seq_len * cfg.grad_acc * world_size
+    tokens_this_step = cfg.micro_batch_size * cfg.seq_len * cfg.grad_accumulation_steps * world_size
     tokens_per_sec = tokens_this_step / step_time
+
+    gpu_name = torch.cuda.get_device_name(0)
+    gpu_peak_flops_per_sec = GPU_PEAK_FLOPS_PER_SEC_MAP.get(gpu_name, None)
+    if gpu_peak_flops_per_sec is not None:
+      mfu = (flops_per_step / step_time) / gpu_peak_flops_per_sec
 
     new_metrics.update(
       {
         'throughput/step_time': step_time,
         'throughput/tokens_per_sec': tokens_per_sec,
-        # 'throughput/mfu': (flops_per_step / step_time) / 312e12,
-        # 'throughput/flops_per_step': flops_per_step,
+        'throughput/mfu': mfu,
+        'throughput/flops_per_step': flops_per_step,
       }
     )
 

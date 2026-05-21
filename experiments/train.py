@@ -66,7 +66,9 @@ def main(_):
   # Bookkeeping
   metrics = defaultdict(list)
   train_loss_array = []
-  flops_per_step = 0
+  # Bookkeeping for throughput
+  flops_per_micro_step = 0
+  step_time = 0
 
   # Training
   for micro_step, micro_batch in enumerate(trainloader, micro_step_start + 1):
@@ -75,26 +77,28 @@ def main(_):
     if step > steps_budget and is_step:
       break
 
-    # if micro_step == 1 and cfg.count_flops:
-    #   flop_counter = FlopCounterMode(model, display=False, depth=2)
-    # else:
-    #   flop_counter = suppress()
+    # count FLOPs used
+    if micro_step == 1 and cfg.measure_throughput:
+      flop_counter = FlopCounterMode(model, display=False, depth=2)
+    else:
+      flop_counter = suppress()
 
-    if cfg.sync_and_time:
+    if cfg.measure_throughput:
       torch.cuda.synchronize()
-      t0 = time.perf_counter()
+      start = time.perf_counter()
 
     # Train
-    # with flop_counter:
-    # if micro_step == 1:
-    # flops_per_step = flop_counter.get_total_flops()
-    train_loss = engine.step(micro_batch)
+    with flop_counter:
+      train_loss = engine.step(micro_batch)
+    if micro_step == 1:
+      flops_per_micro_step = flop_counter.get_total_flops()
     train_loss_array.append(train_loss)
 
-    if cfg.sync_and_time:
+    if cfg.measure_throughput:
       torch.cuda.synchronize()
-      t1 = time.perf_counter()
-      step_time = t1 - t0
+      end = time.perf_counter()
+      micro_step_time = end - start
+      step_time += micro_step_time
 
     # Eval
     valid_loss = None
@@ -102,12 +106,13 @@ def main(_):
       print_master('Evaluating on validation set')
       valid_loss = engine.eval(validloader)
 
-    throughput_metrics = None
-    if cfg.sync_and_time:
-      throuhput_metrics = (step_time, flops_per_step)
-
     # Log
     if master_process and step % cfg.log_every_steps == 0 and is_step:
+      throughput_metrics = None
+      if cfg.measure_throughput:
+        flops_per_step = flops_per_micro_step * cfg.grad_accumulation_steps
+        throughput_metrics = (step_time, flops_per_step)
+
       utils.log(
         cfg,
         metrics,
@@ -120,6 +125,8 @@ def main(_):
         throughput_metrics,
       )
       train_loss_array = []
+      if cfg.measure_throughput:
+        step_time = 0
 
     # Checkpoint
     if master_process and cfg.save_intermediate_checkpoints and step % cfg.save_every_steps == 0 and is_step:
