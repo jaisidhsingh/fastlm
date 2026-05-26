@@ -65,7 +65,7 @@ from absl import app, flags
 from datasets import Dataset, load_dataset, load_from_disk
 from transformers import AutoTokenizer
 
-from src.data.datasets.data_prep_utils import concat_chunck
+from src.data.data_prep_utils import concat_chunck
 
 # Linux’s default “fork” start method inherits open handles (semaphores/CWD)
 # in the pymp-* temp directory, leading to OSError on cleanup.
@@ -100,6 +100,11 @@ flags.DEFINE_boolean('save_tokenized', False, 'Save the tokenized dataset to dis
 flags.DEFINE_boolean('save_tokenizer', False, 'Save the tokenizer to disk. Ignored if `tokenize` is False.')
 
 FLAGS = flags.FLAGS
+
+TOKENIZER_MAP = { 
+    "gpt2": "/home/jsingh/projects/fastlm/tokenizer/better-gpt2",
+    "gpt-neox": "/home/jsingh/projects/fastlm/tokenizer/gpt-neox",
+}
 
 
 def tokenize_batched(examples, tokenizer):
@@ -181,16 +186,18 @@ def main(_):
       raw_ds = load_from_disk(
         os.path.join(out_path, 'raw_dataset'),
       )
+      print("The full dataset has no. of rows = ", len(raw_ds))
 
     # If one wants to tokenize a subset
     if FLAGS.nrows_tokenize is not None:
       nrows_tokenize = int(FLAGS.nrows_tokenize)
       raw_ds = raw_ds.take(nrows_tokenize)
+      print("We are tokenizing", FLAGS.nrows_tokenize, "rows")
 
     # Shuffle so that multiproc has shards of similar size
     raw_ds = raw_ds.shuffle(seed=1996)
 
-    tokenizer = AutoTokenizer.from_pretrained("/home/jsingh/projects/fastlm/tokenizer/better-gpt2")
+    tokenizer = AutoTokenizer.from_pretrained(TOKENIZER_MAP[FLAGS.tokenizer])
     print(f'Length of tokenizer = {len(tokenizer)}')
 
     # Set an high maximum number of tokens that the tokenizer can handle

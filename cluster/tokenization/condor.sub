@@ -1,4 +1,4 @@
-executable=/home/jsingh/projects/fastlm/scripts/prepare_nemotron_cc_sample.sh
+executable=/home/jsingh/projects/fastlm/cluster/tokenization/condor.sh
 
 n_jobs=1
 
@@ -8,9 +8,8 @@ error = $(LOGS_DIR)/err/job.$(Cluster).$(Process).err
 output = $(LOGS_DIR)/out/job.$(Cluster).$(Process).out
 log = $(LOGS_DIR)/log/job.$(Cluster).$(Process).log
 
-# Job requirements
 request_memory = 32G
 request_cpus = 8
-request_gpus = 0
+request_gpus= 0
 
 queue $(n_jobs)

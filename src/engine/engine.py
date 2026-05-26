@@ -6,7 +6,7 @@ from torch.nn import CrossEntropyLoss
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.flop_counter import FlopCounterMode
 
-from src.data.datasets.data_prep_utils import intra_doc_causal_mask
+from src.data.data_prep_utils import intra_doc_causal_mask
 from src.models import get_param_groups
 from src.optim import initialize_scheduler, intialize_optimizer
 
