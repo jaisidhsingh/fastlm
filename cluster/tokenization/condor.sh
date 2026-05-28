@@ -19,6 +19,7 @@ python3 -m experiments.download_or_tokenize_data \
   --tokenize --chunk \
   --tokenizer="gpt2" \
   --nrows_tokenize=75000000 \
+  --n_workers=32 \
   --save_tokenized --save_tokenizer \
   --seq_length=2048 --split_train_valid \
   --n_tokens_valid=10000000 \

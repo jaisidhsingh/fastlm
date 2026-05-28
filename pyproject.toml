@@ -1,8 +1,8 @@
 [project]
-name = "plainLM"
-description = "Pretrain transformers on causal language modeling using PyTorch."
+name = "fastlm"
+description = "Easy pretraining of hybrid language models in PyTorch"
 authors = [
-    { name = "Niccolò Ajroldi" }
+    { name = "Jaisidh Singh" }
 ]
 license = { file = "LICENSE" }
 readme = "README.md"
@@ -23,7 +23,7 @@ requires = ["setuptools", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-packages = ["data", "optim", "engine", "models"]
+packages = ["src"]
 
 [tool.ruff]
 line-length = 120

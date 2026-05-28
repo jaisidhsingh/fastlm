@@ -9,8 +9,6 @@ import wandb
 import yaml
 from absl import flags
 
-from src.engine import TorchEngine
-
 FLAGS = flags.FLAGS
 
 
@@ -21,21 +19,8 @@ GPU_PEAK_FLOPS_PER_SEC_MAP = {
 }
 
 
-def get_steps_from_chinchilla_multiplier(cfg, non_embed_params: int, world_size: int) -> int:
-  token_budget = cfg.chinchilla_token_multiplier * non_embed_params * 20
-  return int(round(token_budget / (cfg.micro_batch_size * cfg.seq_len * cfg.grad_accumulation_steps * world_size)))
-
-
-def get_steps_budget(cfg, engine: TorchEngine, non_embed_params: int, world_size: int) -> int:
-  steps_budget = None
-  if cfg.scheduler == 'linear_cooldown':
-    steps_budget = cfg.resume_step + engine.scheduler.cooldown_steps
-  elif cfg.steps_budget == -1:
-    steps_budget = get_steps_from_chinchilla_multiplier(cfg, non_embed_params, world_size)
-  else:
-    steps_budget = cfg.steps_budget
-  assert steps_budget
-  return steps_budget
+def get_chincilla_details(param_count):
+  return {'token_count': 20 * param_count, 'flop_count': 6 * 20 * (param_count**2)}
 
 
 def load_config(path):

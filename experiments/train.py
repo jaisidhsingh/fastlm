@@ -28,6 +28,7 @@ def main(_):
   cfg, _ = utils.load_config(CFG_PATH)
 
   local_rank, world_size, device, master_process = pytorch_setup(cfg)
+  print_master(f'Number of GPUs: {world_size}')
 
   if master_process:
     utils.maybe_make_dir(cfg)
@@ -44,17 +45,20 @@ def main(_):
 
   # Model
   model, _ = construct_model(cfg)
+  non_embed_params = model.count_params(non_embedding=True)
+  total_params = model.count_params(non_embedding=False)
+  print_master(f"Initialized model with {round(non_embed_params / 1e+6,2)}M non-embedding params, or, {round(total_params/1e+6)}M total params")
 
   # Engine
   engine = TorchEngine(model, cfg, device, local_rank, ckpt)
 
-  # If we are just cooling down, we set budget = resume + cooldown
-  steps_budget = (
-    cfg.steps_budget if cfg.scheduler != 'linear_cooldown' else cfg.resume_step + engine.scheduler.cooldown_steps
-  )
+  # How long do we wanna train for (takes into account resume + cooldown)
+  steps_budget = utils.get_steps_budget(cfg, engine, non_embed_params, world_size)
   micro_step_budget = steps_budget * cfg.grad_accumulation_steps
+  
   if micro_step_budget > len(trainloader):
     raise ValueError('trainloader too short!')
+  print_master(f"Training for {steps_budget} steps <=> {micro_step_budget} micro_steps")
 
   # Start the dataloader from the correct micro-batch
   step_start = cfg.resume_step if cfg.resume else 0
@@ -66,6 +70,7 @@ def main(_):
   # Bookkeeping
   metrics = defaultdict(list)
   train_loss_array = []
+
   # Bookkeeping for throughput
   flops_per_micro_step = 0
   step_time = 0

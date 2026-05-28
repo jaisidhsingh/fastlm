@@ -95,6 +95,7 @@ flags.DEFINE_integer('seq_length', None, 'Sequence length for chunking the datas
 flags.DEFINE_boolean('split_train_valid', False, 'Split the dataset into train and valid sets after chunking.')
 flags.DEFINE_integer('n_tokens_valid', None, 'Number of tokens in the validation set. Ignored if `chunk` is False.')
 
+flags.DEFINE_integer('n_workers', 8, 'Number of parallel CPU workers we can use')
 flags.DEFINE_boolean('save_raw', False, 'Save the raw dataset to disk. Ignored if `download` is False.')
 flags.DEFINE_boolean('save_tokenized', False, 'Save the tokenized dataset to disk. Ignored if `tokenize` is False.')
 flags.DEFINE_boolean('save_tokenizer', False, 'Save the tokenizer to disk. Ignored if `tokenize` is False.')
@@ -136,7 +137,7 @@ def main(_):
 
   tokenizer_name = FLAGS.tokenizer.replace('/', '_') if FLAGS.tokenizer is not None else None  # sanitize name for paths
 
-  map_setup = dict(batched=True, batch_size=1024, num_proc=8)
+  map_setup = dict(batched=True, batch_size=1024, num_proc=int(FLAGS.n_workers))
 
   # --------------------------------------------------------------------
   ## Download.
