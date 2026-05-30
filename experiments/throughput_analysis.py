@@ -10,6 +10,7 @@ from types import SimpleNamespace
 
 import torch
 from absl import app, flags
+from torch.cuda import OutOfMemoryError
 from torch.utils.flop_counter import FlopCounterMode
 
 from src import utils
@@ -36,62 +37,73 @@ def main(_):
   print_master(f'Number of GPUs: {world_size}')
 
   model, model_cfg = construct_model(cfg)
-  engine = TorchEngine(model, cfg, device, local_rank, ckpt=None)
-  trainloader, validloader = get_dataloaders(cfg)
+  done = False
 
-  flops_per_micro_step = 0
-  step_time = 0
-  throughput_metrics = {}
+  while not done:
+    flops_per_micro_step = 0
+    step_time = 0
+    throughput_metrics = {}
 
-  for micro_step, micro_batch in enumerate(trainloader, 1):
-    step = micro_step // cfg.grad_accumulation_steps
-    is_step = micro_step % cfg.grad_accumulation_steps == 0
-    if step > flags.steps and is_step:
-      break
+    try:
+      engine = TorchEngine(model, cfg, device, local_rank, ckpt=None)
+      trainloader, validloader = get_dataloaders(cfg)
 
-    if micro_step == 1:
-      flop_counter = FlopCounterMode(engine.model, display=False, depth=2)
-    else:
-      flop_counter = suppress()
+      for micro_step, micro_batch in enumerate(trainloader, 1):
+        step = micro_step // cfg.grad_accumulation_steps
+        is_step = micro_step % cfg.grad_accumulation_steps == 0
+        if step > flags.steps and is_step:
+          break
 
-    torch.cuda.synchronize()
-    start = time.perf_counter()
+        if micro_step == 1:
+          flop_counter = FlopCounterMode(engine.model, display=False, depth=2)
+        else:
+          flop_counter = suppress()
 
-    with flop_counter:
-      train_loss = engine.step(micro_batch)
-    if micro_step == 1:
-      flops_per_micro_step = flop_counter.get_total_flops()
+        torch.cuda.synchronize()
+        start = time.perf_counter()
 
-    torch.cuda.synchronize()
-    end = time.perf_counter()
-    micro_step_time = end - start
-    step_time += micro_step_time
+        with flop_counter:
+          train_loss = engine.step(micro_batch)
+        if micro_step == 1:
+          flops_per_micro_step = flop_counter.get_total_flops()
 
-    if step == flags.steps and is_step:
-      print_master('Evaluating on validation set')
-      valid_loss = engine.eval(validloader)
+        torch.cuda.synchronize()
+        end = time.perf_counter()
+        micro_step_time = end - start
+        step_time += micro_step_time
 
-    if is_step:
-      tokens_per_step = cfg.micro_batch_size * cfg.seq_len * cfg.grad_accumulation_steps * world_size
-      tokens_per_sec = tokens_per_step / step_time
-      flops_per_step = flops_per_micro_step * cfg.grad_accumulation_steps
-      flops_per_sec = flops_per_step / step_time
-      mfu = flops_per_sec / GPU_PEAK_FLOPS_PER_SEC_MAP[torch.cuda.get_device_name(0) * world_size]
+        if step == flags.steps and is_step:
+          print_master('Evaluating on validation set')
+          valid_loss = engine.eval(validloader)
 
-      throughput_metrics[step] = {
-        'tokens_per_sec': tokens_per_sec,
-        'flops_per_sec': flops_per_sec,
-        'step_time': step_time,
-        'mfu': mfu,
-      }
-      step_time = 0
+        if is_step:
+          tokens_per_step = cfg.micro_batch_size * cfg.seq_len * cfg.grad_accumulation_steps * world_size
+          tokens_per_sec = tokens_per_step / step_time
+          flops_per_step = flops_per_micro_step * cfg.grad_accumulation_steps
+          flops_per_sec = flops_per_step / step_time
+          mfu = flops_per_sec / GPU_PEAK_FLOPS_PER_SEC_MAP[torch.cuda.get_device_name(0) * world_size]
 
-  est = {'param_scale_id': flags.param_scale_id, 'steps_run': flags.steps, 'final_valid_loss': valid_loss}
-  for k in throughput_metrics[step].keys():
-    mlist = [throughput_metrics[flags.steps - i][k] for i in range(flags.steps // 2)]
-    est[k] = {'mean': mean(mlist), 'std': stdev(mlist)}
+          throughput_metrics[step] = {
+            'tokens_per_sec': tokens_per_sec,
+            'flops_per_sec': flops_per_sec,
+            'step_time': step_time,
+            'mfu': mfu,
+          }
+          step_time = 0
 
-  print_master(est)
+      est = {'param_scale_id': flags.param_scale_id, 'steps_run': flags.steps, 'final_valid_loss': valid_loss, 'micro_batch_size': cfg.micro_batch_size, 'grad_accumulation_steps': cfg.grad_accumulation_steps}
+      for k in throughput_metrics[step].keys():
+        mlist = [throughput_metrics[flags.steps - i][k] for i in range(flags.steps // 2)]
+        est[k] = {'mean': mean(mlist), 'std': stdev(mlist)}
+
+      print_master(est)
+      done = True
+
+  except torch.cuda.OutOfMemoryError:
+    cfg.micro_batch_size = cfg.micro_batch_size // 2
+    cfg.grad_accumulation_steps = int(cfg.grad_accumulation_steps * 2)
+    continue
+
   destroy_ddp()
 
 
