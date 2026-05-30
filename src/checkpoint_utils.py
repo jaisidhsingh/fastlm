@@ -5,22 +5,32 @@ import re
 import torch
 
 from src import utils
+from src.constants import SCALING_LADDER
 
 
-def _latest_checkpoint(ckpt_dir: str, prefix: str = 'checkpoint_') -> str | None:
-  """Retrieve the latest checkpoint path in a directory."""
-  if not os.path.isdir(ckpt_dir):
-    return None
+def create_save_steps(cfg, world_size):
+  token_budget_ids_ref = list(SCALING_LADDER['batch_size_vs_token_budget_strategy']['staggered_grid'].keys())
+  token_budget_ids_ref = [float(x[:-1]) for x in token_budget_ids_ref]
+  token_budget_ids_ref.sort()
+  token_budget_ids_ref = [str(x) + 'B' for x in token_budget_ids_ref]
 
-  # List all files matching the prefix pattern
-  checkpoints = [f for f in os.listdir(ckpt_dir) if re.match(rf'^{prefix}\d+$', f)]
-  checkpoints.sort(key=lambda x: int(x[len(prefix) :]))  # Sort numerically
+  index = token_budget_ids_ref.index(cfg.token_budget_id)
+  intermediate_save_ids = token_budget_ids_ref[: index + 1]
 
-  return os.path.join(ckpt_dir, checkpoints[-1]) if checkpoints else None
+  # we only want to save the start of the cooldown for all the intermediate token_budget_ids,
+  # but for the last one i.e. cfg.token_budget_id, we only want to save the final one.
+
+  intermediate_points_to_save_at = [float(x[:-1]) * 1e9 for x in intermediate_save_ids]
+  intermediate_points_to_save_at = [
+    t // (cfg.micro_batch_size * cfg.grad_accumulation_steps * cfg.seq_len * world_size) for t in points_to_save_at
+  ]
+  intermediate_points_to_save_at = [t - cfg.cooldown_steps for t in intermediate_points_to_save_at]
+  all_save_points = intermediate_points_to_save_at + [cfg.steps_budget]
+  names = [n.replace('.', 'p') for n in token_budget_ids_ref[: index + 2]]
+  return {k: v for k, v in zip(all_save_points, names)}
 
 
-def save_checkpoint(step, model, engine, cfg, metrics):
-
+def save_checkpoint(step, model, engine, cfg, metrics, name):
   optimizer = engine.optimizer
   scheduler = engine.scheduler
   scaler = engine.scaler
@@ -29,23 +39,26 @@ def save_checkpoint(step, model, engine, cfg, metrics):
   save_scheduler = getattr(cfg, 'save_scheduler', True)
   save_scaler = getattr(cfg, 'save_scaler', True)
 
+  try:
+    config_dict = vars(cfg)
+  except:
+    config_dict = cfg._asdict()
+
   state = {
     'step': step,
+    'config': config_dict,
     'state_dict': model.state_dict(),
     'optimizer': optimizer.state_dict() if save_optim else None,
     'scheduler': scheduler.state_dict() if scheduler and save_scheduler else {},
     'scaler': scaler.state_dict() if save_scaler else None,
   }
 
-  exp_dir = utils.get_exp_dir_path(cfg)
-
-  # Save ckpt
-  save_path = os.path.join(exp_dir, f'ckpt_step_{step}.pth')
-  print(f'Saving checkpoint to {save_path}')
+  save_folder = utils.get_exp_dir_path(cfg)
+  save_path = os.path.join(save_folder, f'ckpt_{name}.pt')
+  utils.print_master(f'Saving checkpoint to {save_path}')
   torch.save(state, save_path)
 
-  # Save metrics
-  metrics_path = os.path.join(exp_dir, 'metrics.json')
+  metrics_path = os.path.join(save_folder, f'metrics_{name}.json')
   with open(metrics_path, 'w') as f:
     json.dump(dict(metrics), f)
 

@@ -75,16 +75,15 @@ parameter_scale_id/
         │   ├── throughput_analysis.json
         │   └── checkpoints/
         │       ├── lr_0p01/
+        │       │   ├── info.txt
         │       │   ├── metrics_warmup_done.json
         │       │   ├── warmup_done.pt
-        │       │   ├── metrics_decay_starts_to_3B.json
-        │       │   ├── decay_starts_to_3B.pt
-        │       │   ├── metrics_decayed_to_3B.json
-        │       │   ├── decayed_to_3B.pt
-        │       │   ├── metrics_decay_starts_to_6B.json
-        │       │   ├── decay_starts_to_6B.pt
-        │       │   ├── metrics_decayed_to_6B.json
-        │       │   ├── decayed_to_6B.pt
+        │       │   ├── metrics_decay_starts_to_0p5B.json
+        │       │   ├── ckpt_decay_starts_to_0p5B.pt
+        │       │   ├── metrics_decayed_to_0p5B.json
+        │       │   ├── ckpt_decayed_to_0p5B.pt
+        │       │   ├── metrics_decayed_to_1p0B.json
+        │       │   ├── ckpt_decayed_to_1p0B.pt
         │       │   └── ...
         │       │
         │       ├── lr_0p02/

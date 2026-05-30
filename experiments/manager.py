@@ -9,13 +9,6 @@ from src.constants import DEFAULT_CONFIG, SCALING_LADDER
 
 
 class ExperimentManager:
-  """
-  For one particular `parameter_scale_id`, we only need to schedule
-  `len(SCALING_LADDER['batch_sizes'])` * `len(SCALING_LADDER['learning_rates'])` runs.
-  Instead of running all of them parallely, we schedule `len(SCALING_LADDER['batch_sizes'])`
-  parallel jobs, that each sweep over all learning rates for a fixed batch size
-  """
-
   def __init__(self, parameter_scale_id: str, experiment_folder: str):
     self.parameter_scale_id = parameter_scale_id
     self.experiment_folder = experiment_folder
@@ -29,6 +22,7 @@ class ExperimentManager:
     self.gbs_to_token_map = SCALING_LADDER['batch_size_vs_token_budget_strategy']['staggered_runs']
 
     self.warmup_steps = SCALING_LADDER['warmup_steps']
+    self.cooldown_steps = SCALING_LADDER['cooldown_steps']
     self.seq_len = SCALING_LADDER['seq_len']
     self.throughput_analysis_steps = SCALING_LADDER['throughput_analysis_steps']
 
@@ -37,11 +31,13 @@ class ExperimentManager:
       budget = self.gbs_to_token_map[gbs]
       total_tokens = self.token_budget_map[budget]
       steps = int(total_tokens // (gbs * self.seq_len))
-      if steps < self.warmup_steps:
-        print(f'Warmup steps={self.warmup_steps} more than total steps={steps} for GBS={gbs}')
+      if steps < self.warmup_steps or self.warmup_steps + self.cooldown_steps >= steps:
+        print(
+          f'Bad combination of warmup steps={self.warmup_steps} and cooldown steps={self.cooldown_steps} with total steps={steps} for GBS={gbs}'
+        )
       else:
         print(
-          f'Warmup steps={self.warmup_steps} accomodated by total steps={steps} for GBS={gbs} under token budget={budget}'
+          f'Warmup steps={self.warmup_steps} and cooldown steps={self.cooldown_steps} accomodated by total steps={steps} for GBS={gbs} under token budget={budget}'
         )
 
   def make_throughput_analysis_configs(self, gbs: int) -> list:
@@ -120,7 +116,8 @@ class ExperimentManager:
 
 
 if __name__ == '__main__':
-  sc = '50M'
+  scales = list(SCALING_LADDER['models'].keys())
   folder = '/Users/jaisidhsingh/Code/tuebingen/thesis/code/fastlm/manager_check'
-  manager = ExperimentManager(sc, folder)
-  manager.create_configs_for_sweep()
+  for sc in scales:
+    manager = ExperimentManager(sc, folder)
+    manager.check_steps_accomodate_warmup()
