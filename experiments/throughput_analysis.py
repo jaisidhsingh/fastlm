@@ -91,7 +91,13 @@ def main(_):
           }
           step_time = 0
 
-      est = {'param_scale_id': flags.param_scale_id, 'steps_run': flags.steps, 'final_valid_loss': valid_loss, 'micro_batch_size': cfg.micro_batch_size, 'grad_accumulation_steps': cfg.grad_accumulation_steps}
+      est = {
+        'param_scale_id': flags.param_scale_id,
+        'steps_run': flags.steps,
+        'final_valid_loss': valid_loss,
+        'micro_batch_size': cfg.micro_batch_size,
+        'grad_accumulation_steps': cfg.grad_accumulation_steps,
+      }
       for k in throughput_metrics[step].keys():
         mlist = [throughput_metrics[flags.steps - i][k] for i in range(flags.steps // 2)]
         est[k] = {'mean': mean(mlist), 'std': stdev(mlist)}
@@ -99,10 +105,13 @@ def main(_):
       print_master(est)
       done = True
 
-  except torch.cuda.OutOfMemoryError:
-    cfg.micro_batch_size = cfg.micro_batch_size // 2
-    cfg.grad_accumulation_steps = int(cfg.grad_accumulation_steps * 2)
-    continue
+    except torch.cuda.OutOfMemoryError:
+      cfg.micro_batch_size = cfg.micro_batch_size // 2
+      cfg.grad_accumulation_steps = int(cfg.grad_accumulation_steps * 2)
+
+      if cfg.micro_batch_size == 1:
+        done = True
+      continue
 
   destroy_ddp()
 
