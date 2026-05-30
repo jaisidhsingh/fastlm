@@ -23,7 +23,6 @@ flags.DEFINE_string('param_scale_id', '300M', 'ID of the parameter scale for our
 flags.DEFINE_integer('micro_batch_size', 32, 'Micro batch size.')
 flags.DEFINE_integer('grad_accumulation_steps', 4, 'Gradient accumulation steps.')
 flags.DEFINE_integer('steps', 100, 'How many steps to check OOM for.')
-flags.DEFINE_integer('avg_over', 50, 'How many steps from the end to average metrics over.')
 FLAGS = flags.FLAGS
 
 
@@ -87,9 +86,9 @@ def main(_):
       }
       step_time = 0
 
-  est = {'steps_run': flags.steps, 'final_valid_loss': valid_loss}
+  est = {'param_scale_id': flags.param_scale_id, 'steps_run': flags.steps, 'final_valid_loss': valid_loss}
   for k in throughput_metrics[step].keys():
-    mlist = [throughput_metrics[flags.steps - i][k] for i in range(flags.avg_over)]
+    mlist = [throughput_metrics[flags.steps - i][k] for i in range(flags.steps // 2)]
     est[k] = {'mean': mean(mlist), 'std': stdev(mlist)}
 
   print_master(est)

@@ -2,7 +2,7 @@
 
 cd /home/jsingh/projects/fastlm
 
-config="src/config/attn/small_scale/attn_10M.yaml"
-steps=50
+param_scale_id="50M"
+steps=100
 
-python -m experiments.find_max_mbs --config=$config --steps=$steps
+python -m experiments.throughput_analysis --param_scale_id=$param_scale_id --steps=$steps
