@@ -25,7 +25,7 @@ expand: "3.0"
 n_layers: 8
 n_heads: 4
 rms_norm: True
-tie_embeddings: False
+tie_embeddings: True
 torch_compile: True
 token_mixer: "attn"
 hybrid_mixer_ratio: 1

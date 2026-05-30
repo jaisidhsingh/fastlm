@@ -1,5 +1,4 @@
-"""Pretrain a Transformer on language modeling."""
-
+import multiprocessing as mp
 import time
 from collections import defaultdict
 from contextlib import suppress
@@ -15,6 +14,8 @@ from src.engine import TorchEngine
 from src.models import construct_model
 from src.torch_utils import destroy_ddp, pytorch_setup
 from src.utils import print_master
+
+mp.set_start_method('spawn', force=True)
 
 flags.DEFINE_string('config', 'config/config.yaml', 'Path to config.yaml file.')
 flags.DEFINE_integer('job_idx', None, 'Job idx for job-array sweeps. From 0 to n-1.')
@@ -47,7 +48,9 @@ def main(_):
   model, _ = construct_model(cfg)
   non_embed_params = model.count_params(non_embedding=True)
   total_params = model.count_params(non_embedding=False)
-  print_master(f"Initialized model with {round(non_embed_params / 1e+6,2)}M non-embedding params, or, {round(total_params/1e+6)}M total params")
+  print_master(
+    f'Initialized model with {round(non_embed_params / 1e6, 2)}M non-embedding params, or, {round(total_params / 1e6)}M total params'
+  )
 
   # Engine
   engine = TorchEngine(model, cfg, device, local_rank, ckpt)
@@ -55,10 +58,10 @@ def main(_):
   # How long do we wanna train for (takes into account resume + cooldown)
   steps_budget = utils.get_steps_budget(cfg, engine, non_embed_params, world_size)
   micro_step_budget = steps_budget * cfg.grad_accumulation_steps
-  
+
   if micro_step_budget > len(trainloader):
     raise ValueError('trainloader too short!')
-  print_master(f"Training for {steps_budget} steps <=> {micro_step_budget} micro_steps")
+  print_master(f'Training for {steps_budget} steps <=> {micro_step_budget} micro_steps')
 
   # Start the dataloader from the correct micro-batch
   step_start = cfg.resume_step if cfg.resume else 0

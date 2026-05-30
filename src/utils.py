@@ -3,12 +3,14 @@ import os
 import shutil
 from collections import namedtuple
 from itertools import product
+from types import SimpleNamespace
 
 import torch
 import wandb
 import yaml
 from absl import flags
 
+from src.constants import DEFAULT_CONFIG, SCALING_LADDER
 from src.engine import TorchEngine
 
 FLAGS = flags.FLAGS
@@ -36,6 +38,13 @@ def get_steps_budget(cfg, engine: TorchEngine, non_embed_params: int, world_size
     steps_budget = cfg.steps_budget
   assert steps_budget
   return steps_budget
+
+
+def load_config_from_constants(param_scale_id):
+  config_dict = DEFAULT_CONFIG
+  for k in ['d_model', 'n_layers', 'n_heads']:
+    config_dict[k] = SCALING_LADDER['models'][param_scale_id][k]
+  return SimpleNamespace(**config_dict)
 
 
 def load_config(path):
