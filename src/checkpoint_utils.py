@@ -3,6 +3,7 @@ import os
 import re
 
 import torch
+from pandas._libs.lib import i8max
 
 from src import utils
 from src.constants import SCALING_LADDER
@@ -14,20 +15,31 @@ def create_save_steps(cfg, world_size):
   token_budget_ids_ref.sort()
   token_budget_ids_ref = [str(x) + 'B' for x in token_budget_ids_ref]
 
-  index = token_budget_ids_ref.index(cfg.token_budget_id)
-  intermediate_save_ids = token_budget_ids_ref[: index + 1]
+  if not cfg.resume:
+    # we want to save the start of the cooldown for all the intermediate token_budget_ids,
+    # and for the last one, i.e. cfg.token_budget_id, we want to save when the cooldown starts + the final ckpt.
+    index = token_budget_ids_ref.index(cfg.token_budget_id)
+    save_ids = token_budget_ids_ref[: index + 2]
 
-  # we only want to save the start of the cooldown for all the intermediate token_budget_ids,
-  # but for the last one i.e. cfg.token_budget_id, we only want to save the final one.
+    points_to_save_at = [float(x[:-1]) * 1e9 for x in save_ids]
+    points_to_save_at = [
+      t // (cfg.micro_batch_size * cfg.grad_accumulation_steps * cfg.seq_len * world_size) for t in points_to_save_at
+    ]
+    points_to_save_at = [t - cfg.cooldown_steps for t in points_to_save_at]
+    names = []
 
-  intermediate_points_to_save_at = [float(x[:-1]) * 1e9 for x in intermediate_save_ids]
-  intermediate_points_to_save_at = [
-    t // (cfg.micro_batch_size * cfg.grad_accumulation_steps * cfg.seq_len * world_size) for t in points_to_save_at
-  ]
-  intermediate_points_to_save_at = [t - cfg.cooldown_steps for t in intermediate_points_to_save_at]
-  all_save_points = intermediate_points_to_save_at + [cfg.steps_budget]
-  names = [n.replace('.', 'p') for n in token_budget_ids_ref[: index + 2]]
-  return {k: v for k, v in zip(all_save_points, names)}
+    for i in range(len(points_to_save_at)):
+      tok_id = save_ids[i]
+      names.append(f'decay_starts_to_{tok_id.replace(".", "p")}')
+
+    # we want to save the last one because we decay automatically at the end
+    points_to_save_at = [cfg.warmup_steps] + points_to_save_at + [cfg.steps_budget]
+    names = ['warmup_done'] + [names] + [f'decayed_to_{cfg.token_budget_id.replace(".", ",")}']
+
+    return {k: v for k, v in zip(points_to_save_at, names)}
+
+  else:
+    return {cfg.cooldown_steps: f'decayed_to_{cfg.token_budget_id.replace(".", ",")}'}
 
 
 def save_checkpoint(step, model, engine, cfg, metrics, name):

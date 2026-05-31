@@ -62,7 +62,7 @@ def load_config(path):
 
   with open(path, 'r') as file:
     config_dict = yaml.safe_load(file)
-  Config = namedtuple('Config', config_dict.keys())
+  # Config = namedtuple('Config', config_dict.keys())
 
   if FLAGS.job_idx is None:
     cfg = config_dict
@@ -80,7 +80,7 @@ def load_config(path):
     combination = combinations[FLAGS.job_idx]
     cfg = {keys[i]: combination[i] for i in range(len(keys))}
 
-  return Config(**cfg), sweep_size
+  return SimpleNamespace(**cfg), sweep_size
 
 
 def init_wandb(cfg):
