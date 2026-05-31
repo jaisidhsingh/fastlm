@@ -19,7 +19,7 @@ def create_save_steps(cfg, world_size):
     # we want to save the start of the cooldown for all the intermediate token_budget_ids,
     # and for the last one, i.e. cfg.token_budget_id, we want to save when the cooldown starts + the final ckpt.
     index = token_budget_ids_ref.index(cfg.token_budget_id)
-    save_ids = token_budget_ids_ref[: index + 2]
+    save_ids = token_budget_ids_ref[: index + 1]
 
     points_to_save_at = [float(x[:-1]) * 1e9 for x in save_ids]
     points_to_save_at = [
@@ -34,15 +34,15 @@ def create_save_steps(cfg, world_size):
 
     # we want to save the last one because we decay automatically at the end
     points_to_save_at = [cfg.warmup_steps] + points_to_save_at + [cfg.steps_budget]
-    names = ['warmup_done'] + [names] + [f'decayed_to_{cfg.token_budget_id.replace(".", ",")}']
+    names = ['warmup_done'] + names + [f'decayed_to_{cfg.token_budget_id.replace(".", "p")}']
 
     return {k: v for k, v in zip(points_to_save_at, names)}
 
   else:
-    return {cfg.cooldown_steps: f'decayed_to_{cfg.token_budget_id.replace(".", ",")}'}
+    return {cfg.cooldown_steps: f'decayed_to_{cfg.token_budget_id.replace(".", "p")}'}
 
 
-def save_checkpoint(step, model, engine, cfg, metrics, name):
+def save_checkpoint(step, model, engine, cfg, metrics, name, world_size):
   optimizer = engine.optimizer
   scheduler = engine.scheduler
   scaler = engine.scaler
@@ -65,7 +65,7 @@ def save_checkpoint(step, model, engine, cfg, metrics, name):
     'scaler': scaler.state_dict() if save_scaler else None,
   }
 
-  save_folder = utils.get_exp_dir_path(cfg)
+  save_folder = utils.get_exp_dir_path(cfg, world_size)
   os.makedirs(save_folder, exist_ok=True)
 
   # Add info about the step at which we are saving
@@ -82,6 +82,7 @@ def save_checkpoint(step, model, engine, cfg, metrics, name):
 
 
 def maybe_load_checkpoint(cfg):
+  return None
   """Each job_idx will restore where it left of."""
   ckpt = None
 

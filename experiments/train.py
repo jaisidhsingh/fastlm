@@ -1,4 +1,3 @@
-import multiprocessing as mp
 import time
 from collections import defaultdict
 from contextlib import suppress
@@ -8,16 +7,14 @@ from absl import app, flags
 from torch.utils.flop_counter import FlopCounterMode
 
 from src import utils
-from src.checkpoint_utils import create_save_steps, save_checkpoint
+from src.checkpoint_utils import create_save_steps, maybe_load_checkpoint, save_checkpoint
 from src.data import get_dataloaders
 from src.engine import TorchEngine
 from src.models import construct_model
 from src.torch_utils import destroy_ddp, pytorch_setup
 from src.utils import print_master
 
-mp.set_start_method('spawn', force=True)
-
-flags.DEFINE_string('config', 'config/config.yaml', 'Path to config.yaml file.')
+flags.DEFINE_string('config', 'src/config/cfg_test.yaml', 'Path to config.yaml file.')
 flags.DEFINE_integer('job_idx', None, 'Job idx for job-array sweeps. From 0 to n-1.')
 flags.DEFINE_integer('job_cluster', None, 'Job cluster ID.')
 FLAGS = flags.FLAGS
@@ -29,9 +26,6 @@ def main(argv):
 
   local_rank, world_size, device, master_process = pytorch_setup(cfg)
   print_master(f'Number of GPUs: {world_size}')
-
-  if master_process:
-    utils.maybe_make_dir(cfg)
 
   if cfg.use_wandb and master_process:
     utils.init_wandb(cfg)
@@ -52,8 +46,9 @@ def main(argv):
   )
 
   # Engine
-  steps_budget = utils.get_steps_budget(cfg, engine, world_size)
+  steps_budget = utils.get_steps_budget(cfg, world_size)
   cfg.steps_budget = steps_budget
+  engine = TorchEngine(model, cfg, device, local_rank, ckpt)
 
   if cfg.scheduler == 'linear_cooldown':
     steps_budget = cfg.resume_step + engine.scheduler.cooldown_steps
@@ -62,8 +57,6 @@ def main(argv):
   print_master(
     f'Training will run for {steps_budget} steps, or, {steps_budget * cfg.grad_accumulation_steps} micro steps'
   )
-
-  engine = TorchEngine(model, cfg, device, local_rank, ckpt)
 
   # How long do we wanna train for (takes into account resume + cooldown)
   micro_step_budget = steps_budget * cfg.grad_accumulation_steps
@@ -88,6 +81,7 @@ def main(argv):
   step_time = 0
 
   # When do we want to save
+  exp_folder = utils.get_exp_dir_path(cfg, world_size)
   save_points = create_save_steps(cfg, world_size)
 
   # Training
@@ -110,7 +104,7 @@ def main(argv):
     # Train
     with flop_counter:
       train_loss = engine.step(micro_batch)
-    if micro_step == 1:
+    if micro_step == 1 and cfg.measure_throughput:
       flops_per_micro_step = flop_counter.get_total_flops()
     train_loss_array.append(train_loss)
 
@@ -149,14 +143,14 @@ def main(argv):
         step_time = 0
 
     # Checkpoint
-    if master_process and is_step and step in save_points:
+    if master_process and is_step and step in save_points and cfg.save_intermediate_checkpoints:
       save_name = save_points[step]
-      save_checkpoint(step, model, engine, cfg, metrics, save_name)
+      save_checkpoint(step, model, engine, cfg, metrics, save_name, world_size)
 
   # End of training: log and save checkpoint
   print_master('=== Training Completed! ===')
   if master_process and cfg.save_last_checkpoint:
-    save_checkpoint(step, model, engine, cfg, metrics, name='end_of_training_backup')
+    save_checkpoint(step, model, engine, cfg, metrics, 'end_of_training_backup', world_size)
 
   # DDP slaughtering
   destroy_ddp()

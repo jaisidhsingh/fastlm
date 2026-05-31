@@ -10,7 +10,7 @@ import wandb
 import yaml
 from absl import flags
 
-from src.constants import DEFAULT_CONFIG, SCALING_LADDER
+from src.constants import DEFAULT_CONFIG, SCALING_LADDER, SCALING_RESULTS_FOLDER
 from src.engine import TorchEngine
 
 FLAGS = flags.FLAGS
@@ -55,11 +55,6 @@ def load_config_from_constants(param_scale_id):
 
 
 def load_config(path):
-  """
-  Parse a yaml file and return the correspondent config as a namedtuple.
-  If the config files has multiple entries, returns the one corresponding to job_idx.
-  """
-
   with open(path, 'r') as file:
     config_dict = yaml.safe_load(file)
   # Config = namedtuple('Config', config_dict.keys())
@@ -84,7 +79,6 @@ def load_config(path):
 
 
 def init_wandb(cfg):
-  """Initalizes a wandb run"""
   # os.environ['WANDB__SERVICE_WAIT'] = '600'
   # os.environ['WANDB_SILENT'] = 'true'
 
@@ -102,12 +96,11 @@ def init_wandb(cfg):
     entity=cfg.wandb_entity,
     name=name,
     dir=cfg.wandb_dir,
-    config=cfg._asdict(),
+    config=vars(cfg),
   )
 
 
 def log_job_info():
-  """Logs info about cluster job."""
   if FLAGS.job_cluster is not None and FLAGS.job_idx is not None:
     print(f'JOB_CLUSER = {FLAGS.job_cluster}')
     print(f'JOB_INDEX = {FLAGS.job_idx}')
@@ -125,16 +118,16 @@ def _matching_wandb_run_exists(cfg):
   return False
 
 
-def get_exp_dir_path(cfg):
-  """Build a exp_dir path from config. It supports job arrays."""
-  exp_dir = os.path.join(cfg.out_dir, cfg.exp_name)
-  if FLAGS.job_idx is not None:  # subfolder for each job in the sweep
-    exp_dir = os.path.join(exp_dir, f'job_idx_{FLAGS.job_idx}')
-  return exp_dir
+def get_exp_dir_path(cfg, world_size):
+  gbs = int(cfg.micro_batch_size * cfg.grad_accumulation_steps * world_size)
+  arch, ratio = parse_arch_id(cfg.arch_id)
+  gbs_folder = os.path.join(SCALING_RESULTS_FOLDER, arch, cfg.param_scale_id, 'gbs_wise_results', f'gbs_{gbs}')
+  exp_folder = os.path.join(gbs_folder, 'checkpoints', f'lr_{str(cfg.lr).replace(".", "p")}')
+  os.makedirs(exp_folder, exist_ok=True)
+  return exp_folder
 
 
 def maybe_make_dir(cfg):
-  """Creates an experiment directory if checkpointing is enabled"""
   if not cfg.save_intermediate_checkpoints and not cfg.save_last_checkpoint:
     return
   if cfg.resume and cfg.resume_exp_name is None:  # if resuming from the same exp
@@ -157,8 +150,6 @@ def maybe_make_dir(cfg):
 def log(
   cfg, metrics, micro_step, train_loss, train_loss_array, valid_loss, optimizer, world_size, throughput_metrics=None
 ):
-  """Update metrics, print to console, log on wandb."""
-
   if isinstance(train_loss_array, list):
     train_loss_avg = torch.stack(train_loss_array).mean().item()
   elif isinstance(train_loss_array, torch.Tensor):
@@ -170,9 +161,9 @@ def log(
     'tokens': micro_step * cfg.micro_batch_size * cfg.seq_len * world_size,
     'lr': optimizer.param_groups[0].get('lr', float('NaN')),
     'train/loss': train_loss.item(),
-    'train/loss_avg': train_loss_avg,
+    # 'train/loss_avg': train_loss_avg,
     'train/ppl': math.exp(train_loss),
-    'train/ppl_avg': math.exp(train_loss_avg),
+    # 'train/ppl_avg': math.exp(train_loss_avg),
   }
   if throughput_metrics is not None:
     step_time, flops_per_step = throughput_metrics
@@ -195,7 +186,7 @@ def log(
 
   if valid_loss is not None:
     new_metrics['valid/loss'] = valid_loss
-    new_metrics['valid/ppl'] = math.exp(valid_loss)
+    # new_metrics['valid/ppl'] = math.exp(valid_loss)
 
   for k, v in new_metrics.items():
     metrics[k].append(v)
