@@ -14,35 +14,52 @@ from torch.cuda import OutOfMemoryError
 from torch.utils.flop_counter import FlopCounterMode
 
 from src import utils
+from src.constants import SCALING_RESULTS_FOLDER
 from src.data import get_dataloaders
 from src.engine import TorchEngine
 from src.models import construct_model
 from src.torch_utils import destroy_ddp, pytorch_setup
 from src.utils import GPU_PEAK_FLOPS_PER_SEC_MAP, print_master
 
+flags.DEFINE_string('arch_id', 'attn', 'Architecture of the LLM.')
 flags.DEFINE_string('param_scale_id', '300M', 'ID of the parameter scale for our models.')
-flags.DEFINE_integer('micro_batch_size', 32, 'Micro batch size.')
-flags.DEFINE_integer('grad_accumulation_steps', 4, 'Gradient accumulation steps.')
+flags.DEFINE_integer('global_batch_size', 32, 'Micro batch size.')
 flags.DEFINE_integer('steps', 100, 'How many steps to check OOM for.')
 FLAGS = flags.FLAGS
 
 
-def main(_):
+def main(argv):
   cfg = utils.load_config_from_constants(flags.param_scale_id)
-  cfg.micro_batch_size = flags.micro_batch_size
-  cfg.grad_accumulation_steps = flags.grad_accumulation_steps
+  local_rank, world_size, device, master_process = pytorch_setup(cfg)
+
+  save_folder = os.path.join(
+    SCALING_RESULTS_FOLDER, flags.arch_id, flags.param_scale_id, 'gbs_wise_results', f'gbs_{flags.global_batch_size}'
+  )
+  arch, ratio = utils.parse_arch_id(flags.arch_id)
+  cfg.token_mixer = arch
+  cfg.hybrid_mixer_ratio = ratio
+
+  print_master(f'Architecture={flags.arch_id} and GBS={flags.global_batch_size}')
+
+  cfg.micro_batch_size = flags.global_batch_size // world_size
+  cfg.grad_accumulation_steps = 1
   cfg.steps_budget = 1000
 
-  local_rank, world_size, device, master_process = pytorch_setup(cfg)
   print_master(f'Number of GPUs: {world_size}')
+  print_master('Starting throughput analysis\n')
 
   model, model_cfg = construct_model(cfg)
   done = False
+  est = None
 
   while not done:
     flops_per_micro_step = 0
     step_time = 0
     throughput_metrics = {}
+
+    print_master(
+      f'For GBS={flags.global_batch_size}, checking MBS={cfg.micro_batch_size}, GAS={cfg.grad_accumulation_steps}'
+    )
 
     try:
       engine = TorchEngine(model, cfg, device, local_rank, ckpt=None)
@@ -79,11 +96,12 @@ def main(_):
         if is_step:
           tokens_per_step = cfg.micro_batch_size * cfg.seq_len * cfg.grad_accumulation_steps * world_size
           tokens_per_sec = tokens_per_step / step_time
-          flops_per_step = flops_per_micro_step * cfg.grad_accumulation_steps
+          flops_per_step = flops_per_micro_step * cfg.grad_accumulation_steps * world_size
           flops_per_sec = flops_per_step / step_time
           mfu = flops_per_sec / GPU_PEAK_FLOPS_PER_SEC_MAP[torch.cuda.get_device_name(0) * world_size]
 
           throughput_metrics[step] = {
+            'flops_per_step': flops_per_step,
             'tokens_per_sec': tokens_per_sec,
             'flops_per_sec': flops_per_sec,
             'step_time': step_time,
@@ -95,23 +113,33 @@ def main(_):
         'param_scale_id': flags.param_scale_id,
         'steps_run': flags.steps,
         'final_valid_loss': valid_loss,
+        'global_batch_size': int(cfg.micro_batch_size * cfg.grad_accumulation_steps * world_size),
         'micro_batch_size': cfg.micro_batch_size,
         'grad_accumulation_steps': cfg.grad_accumulation_steps,
+        'dp': world_size,
+        'throughput_metrics': {},
       }
       for k in throughput_metrics[step].keys():
         mlist = [throughput_metrics[flags.steps - i][k] for i in range(flags.steps // 2)]
-        est[k] = {'mean': mean(mlist), 'std': stdev(mlist)}
+        est['throughput_metrics'][k] = {'mean': mean(mlist), 'std': stdev(mlist)}
 
-      print_master(est)
+      print_master(
+        f'For GBS={flags.global_batch_size}, MBS={cfg.micro_batch_size}, GAS={cfg.grad_accumulation_steps} works!'
+      )
+      print_master(f'Estimated tokens-per-second={est["throughput_metrics"]["tokens_per_sec"]["mean"]}')
+      # print_master('Saving throughput logs and exiting.')
+      # with open(os.path.join(save_folder, 'throughput_analysis.json'), 'w') as f:
+      #   json.dump(est, f)
       done = True
 
     except torch.cuda.OutOfMemoryError:
+      print_master(f'MBS={cfg.micro_batch_size} does not fit in memory. Reducing by half and doubling GAS...\n')
       cfg.micro_batch_size = cfg.micro_batch_size // 2
       cfg.grad_accumulation_steps = int(cfg.grad_accumulation_steps * 2)
 
-      if cfg.micro_batch_size == 1:
+      if cfg.micro_batch_size == 0:
+        print_master('Cannot fit any samples in memory. Nothing to save. Exiting.')
         done = True
-      continue
 
   destroy_ddp()
 

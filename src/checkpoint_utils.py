@@ -54,6 +54,12 @@ def save_checkpoint(step, model, engine, cfg, metrics, name):
   }
 
   save_folder = utils.get_exp_dir_path(cfg)
+  os.makedirs(save_folder, exist_ok=True)
+
+  # Add info about the step at which we are saving
+  with open(os.path.join(save_folder, 'info.txt'), 'a') as f:
+    f.writelines([f'{name} = step_{step}\n'])
+
   save_path = os.path.join(save_folder, f'ckpt_{name}.pt')
   utils.print_master(f'Saving checkpoint to {save_path}')
   torch.save(state, save_path)

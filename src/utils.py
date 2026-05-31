@@ -23,21 +23,28 @@ GPU_PEAK_FLOPS_PER_SEC_MAP = {
 }
 
 
+def parse_arch_id(arch_id):
+  split_id = arch_id.split('_')
+  arch = split_id[0]
+  ratio = 1
+  if len(split_id) == 2:
+    ratio = int(split_id[1].split('-')[-1])
+  return arch, ratio
+
+
 def get_steps_from_chinchilla_multiplier(cfg, non_embed_params: int, world_size: int) -> int:
   token_budget = cfg.chinchilla_token_multiplier * non_embed_params * 20
   return int(round(token_budget / (cfg.micro_batch_size * cfg.seq_len * cfg.grad_accumulation_steps * world_size)))
 
 
-def get_steps_budget(cfg, engine: TorchEngine, non_embed_params: int, world_size: int) -> int:
-  steps_budget = None
-  if cfg.scheduler == 'linear_cooldown':
-    steps_budget = cfg.resume_step + engine.scheduler.cooldown_steps
-  elif cfg.steps_budget == -1:
-    steps_budget = get_steps_from_chinchilla_multiplier(cfg, non_embed_params, world_size)
-  else:
-    steps_budget = cfg.steps_budget
-  assert steps_budget
-  return steps_budget
+def get_steps_from_token_budget_id(cfg, world_size):
+  tokens = float(cfg.token_budget_id[:-1]) * 1e9
+  return int(round(tokens / (cfg.micro_batch_size * cfg.seq_len * cfg.grad_accumulation_steps * world_size)))
+
+
+def get_steps_budget(cfg, world_size: int) -> int:
+  assert cfg.steps_budget == -1
+  return get_steps_from_token_budget_id(cfg, world_size)
 
 
 def load_config_from_constants(param_scale_id):

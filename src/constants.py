@@ -70,6 +70,9 @@ SCALING_LADDER = {
   'seq_len': 2048,
   'throughput_analysis_steps': 100,
 }
+
+SCALING_RESULTS_FOLDER = '/fast/jsingh/projects/fastlm/june/results/'
+
 DEFAULT_CONFIG = {
   'deterministic': False,
   'seed': 42,
@@ -105,7 +108,7 @@ DEFAULT_CONFIG = {
   'gdn_neg_eigval': True,
   # TRAINING
   'steps_budget': -1,
-  'chinchilla_token_multipler': 2.5,
+  'token_budget_id': '1.0B',
   'micro_batch_size': 32,
   'grad_accumulation_steps': 1,
   'dtype': 'bfloat16',

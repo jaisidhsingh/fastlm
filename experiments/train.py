@@ -8,7 +8,7 @@ from absl import app, flags
 from torch.utils.flop_counter import FlopCounterMode
 
 from src import utils
-from src.checkpoint_utils import maybe_load_checkpoint, save_checkpoint
+from src.checkpoint_utils import create_save_steps, save_checkpoint
 from src.data import get_dataloaders
 from src.engine import TorchEngine
 from src.models import construct_model
@@ -23,8 +23,7 @@ flags.DEFINE_integer('job_cluster', None, 'Job cluster ID.')
 FLAGS = flags.FLAGS
 
 
-def main(_):
-
+def main(argv):
   CFG_PATH = FLAGS.config
   cfg, _ = utils.load_config(CFG_PATH)
 
@@ -53,10 +52,20 @@ def main(_):
   )
 
   # Engine
+  steps_budget = utils.get_steps_budget(cfg, engine, world_size)
+  cfg.steps_budget = steps_budget
+
+  if cfg.scheduler == 'linear_cooldown':
+    steps_budget = cfg.resume_step + engine.scheduler.cooldown_steps
+    cfg.steps_budget = steps_budget
+
+  print_master(
+    f'Training will run for {steps_budget} steps, or, {steps_budget * cfg.grad_accumulation_steps} micro steps'
+  )
+
   engine = TorchEngine(model, cfg, device, local_rank, ckpt)
 
   # How long do we wanna train for (takes into account resume + cooldown)
-  steps_budget = utils.get_steps_budget(cfg, engine, non_embed_params, world_size)
   micro_step_budget = steps_budget * cfg.grad_accumulation_steps
 
   if micro_step_budget > len(trainloader):
@@ -77,6 +86,9 @@ def main(_):
   # Bookkeeping for throughput
   flops_per_micro_step = 0
   step_time = 0
+
+  # When do we want to save
+  save_points = create_save_steps(cfg, world_size)
 
   # Training
   for micro_step, micro_batch in enumerate(trainloader, micro_step_start + 1):
@@ -137,13 +149,14 @@ def main(_):
         step_time = 0
 
     # Checkpoint
-    if master_process and cfg.save_intermediate_checkpoints and step % cfg.save_every_steps == 0 and is_step:
-      save_checkpoint(step, model, engine, cfg, metrics)
+    if master_process and is_step and step in save_points:
+      save_name = save_points[step]
+      save_checkpoint(step, model, engine, cfg, metrics, save_name)
 
   # End of training: log and save checkpoint
   print_master('=== Training Completed! ===')
   if master_process and cfg.save_last_checkpoint:
-    save_checkpoint(step, model, engine, cfg, metrics)
+    save_checkpoint(step, model, engine, cfg, metrics, name='end_of_training_backup')
 
   # DDP slaughtering
   destroy_ddp()
