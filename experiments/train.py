@@ -25,7 +25,10 @@ def main(argv):
   cfg, _ = utils.load_config(CFG_PATH)
 
   local_rank, world_size, device, master_process = pytorch_setup(cfg)
-  print_master(f'Number of GPUs: {world_size}')
+  utils.set_batch_sizes(cfg, world_size)
+  print_master(
+    f'Training on {world_size} GPUs, GBS={cfg.global_batch_size}, MBS={cfg.micro_batch_size}, GAS={cfg.grad_accumulation_steps}'
+  )
 
   if cfg.use_wandb and master_process:
     utils.init_wandb(cfg)
@@ -60,10 +63,12 @@ def main(argv):
 
   # How long do we wanna train for (takes into account resume + cooldown)
   micro_step_budget = steps_budget * cfg.grad_accumulation_steps
+  utils.set_eval_every(cfg)
 
   if micro_step_budget > len(trainloader):
     raise ValueError('trainloader too short!')
   print_master(f'Training for {steps_budget} steps <=> {micro_step_budget} micro_steps')
+  print_master(f'Evaluating every {cfg.eval_every_steps} for a total of {cfg.num_evals} eval points.')
 
   # Start the dataloader from the correct micro-batch
   step_start = cfg.resume_step if cfg.resume else 0
@@ -116,9 +121,10 @@ def main(argv):
 
     # Eval
     valid_loss = None
-    if cfg.eval and step % cfg.eval_every_steps == 0 and is_step:
-      print_master('Evaluating on validation set')
-      valid_loss = engine.eval(validloader)
+    if cfg.eval and is_step:
+      if step % cfg.eval_every_steps == 0 or step == steps_budget:  # last step
+        print_master('Evaluating on validation set')
+        valid_loss = engine.eval(validloader)
 
     # Log
     if master_process and step % cfg.log_every_steps == 0 and is_step:

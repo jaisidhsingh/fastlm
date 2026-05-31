@@ -1,7 +1,7 @@
 #!/bin/bash
 
 source ~/.bashrc
-source ~/miniforge3/etc/profile.d/conda.sh
+source /fast/jsingh/envs/miniforge3/etc/profile.d/conda.sh
 conda activate pt
 cd /home/jsingh/projects/fastlm
 

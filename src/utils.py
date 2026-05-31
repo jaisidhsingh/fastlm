@@ -32,6 +32,21 @@ def parse_arch_id(arch_id):
   return arch, ratio
 
 
+def set_eval_every(cfg):
+  cfg.eval_every_steps = max(1, int(cfg.steps_budget // cfg.num_evals))
+
+
+def set_batch_sizes(cfg, world_size):
+  peak_mbs = SCALING_LADDER['models'][cfg.param_scale_id]['peak_mbs']
+  req_mbs = int(cfg.global_batch_size // world_size)
+
+  if req_mbs > peak_mbs:
+    cfg.micro_batch_size = peak_mbs
+  else:
+    cfg.micro_batch_size = req_mbs
+  cfg.grad_accumulation_steps = int(req_mbs // cfg.micro_batch_size)
+
+
 def get_steps_from_chinchilla_multiplier(cfg, non_embed_params: int, world_size: int) -> int:
   token_budget = cfg.chinchilla_token_multiplier * non_embed_params * 20
   return int(round(token_budget / (cfg.micro_batch_size * cfg.seq_len * cfg.grad_accumulation_steps * world_size)))
