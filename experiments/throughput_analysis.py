@@ -1,17 +1,13 @@
 import json
+import os
 import time
-import typing as tp
-from collections import namedtuple
 from contextlib import suppress
-from copy import deepcopy
-from dataclasses import asdict
 from statistics import mean, stdev
-from types import SimpleNamespace
 
 import torch
 from absl import app, flags
-from torch.cuda import OutOfMemoryError
 from torch.utils.flop_counter import FlopCounterMode
+from tqdm import tqdm
 
 from src import utils
 from src.constants import SCALING_RESULTS_FOLDER
@@ -24,24 +20,26 @@ from src.utils import GPU_PEAK_FLOPS_PER_SEC_MAP, print_master
 flags.DEFINE_string('arch_id', 'attn', 'Architecture of the LLM.')
 flags.DEFINE_string('param_scale_id', '300M', 'ID of the parameter scale for our models.')
 flags.DEFINE_integer('global_batch_size', 32, 'Micro batch size.')
-flags.DEFINE_integer('steps', 100, 'How many steps to check OOM for.')
-FLAGS = flags.FLAGS
+flags.DEFINE_integer('steps', 10, 'How many steps to check OOM for.')
+args = flags.FLAGS
 
 
 def main(argv):
-  cfg = utils.load_config_from_constants(flags.param_scale_id)
+  cfg = utils.load_config_from_constants(args.param_scale_id)
   local_rank, world_size, device, master_process = pytorch_setup(cfg)
 
   save_folder = os.path.join(
-    SCALING_RESULTS_FOLDER, flags.arch_id, flags.param_scale_id, 'gbs_wise_results', f'gbs_{flags.global_batch_size}'
+    SCALING_RESULTS_FOLDER, args.arch_id, args.param_scale_id, 'gbs_wise_results', f'gbs_{args.global_batch_size}'
   )
-  arch, ratio = utils.parse_arch_id(flags.arch_id)
+  os.makedirs(save_folder, exist_ok=True)
+
+  arch, ratio = utils.parse_arch_id(args.arch_id)
   cfg.token_mixer = arch
   cfg.hybrid_mixer_ratio = ratio
 
-  print_master(f'Architecture={flags.arch_id} and GBS={flags.global_batch_size}')
+  print_master(f'Architecture={args.arch_id}:{args.param_scale_id} and GBS={args.global_batch_size}')
 
-  cfg.micro_batch_size = flags.global_batch_size // world_size
+  cfg.micro_batch_size = args.global_batch_size // world_size
   cfg.grad_accumulation_steps = 1
   cfg.steps_budget = 1000
 
@@ -49,6 +47,11 @@ def main(argv):
   print_master('Starting throughput analysis\n')
 
   model, model_cfg = construct_model(cfg)
+  total_params = model.count_params(non_embedding=False)
+  non_embedding_params = model.count_params(non_embedding=True)
+  print_master(
+    f'Initilized model with total params={round(total_params / 1e6, 2)}M, non-embedding params={round(non_embedding_params / 1e6, 2)}M'
+  )
   done = False
   est = None
 
@@ -58,7 +61,7 @@ def main(argv):
     throughput_metrics = {}
 
     print_master(
-      f'For GBS={flags.global_batch_size}, checking MBS={cfg.micro_batch_size}, GAS={cfg.grad_accumulation_steps}'
+      f'For GBS={args.global_batch_size}, checking MBS={cfg.micro_batch_size}, GAS={cfg.grad_accumulation_steps}'
     )
 
     try:
@@ -68,7 +71,7 @@ def main(argv):
       for micro_step, micro_batch in enumerate(trainloader, 1):
         step = micro_step // cfg.grad_accumulation_steps
         is_step = micro_step % cfg.grad_accumulation_steps == 0
-        if step > flags.steps and is_step:
+        if step > args.steps and is_step:
           break
 
         if micro_step == 1:
@@ -89,7 +92,7 @@ def main(argv):
         micro_step_time = end - start
         step_time += micro_step_time
 
-        if step == flags.steps and is_step:
+        if step == args.steps and is_step:
           print_master('Evaluating on validation set')
           valid_loss = engine.eval(validloader)
 
@@ -108,28 +111,29 @@ def main(argv):
             'mfu': mfu,
           }
           step_time = 0
+          print(f'Step={step}, tokens_per_sec={tokens_per_sec}')
 
       est = {
-        'param_scale_id': flags.param_scale_id,
-        'steps_run': flags.steps,
+        'param_scale_id': args.param_scale_id,
+        'steps_run': args.steps,
         'final_valid_loss': valid_loss,
         'global_batch_size': int(cfg.micro_batch_size * cfg.grad_accumulation_steps * world_size),
         'micro_batch_size': cfg.micro_batch_size,
         'grad_accumulation_steps': cfg.grad_accumulation_steps,
-        'dp': world_size,
+        'world_size_for_throughput_study': world_size,
         'throughput_metrics': {},
       }
-      for k in throughput_metrics[step].keys():
-        mlist = [throughput_metrics[flags.steps - i][k] for i in range(flags.steps // 2)]
+      for k in throughput_metrics[step - 1].keys():
+        mlist = [throughput_metrics[args.steps - i][k] for i in range(args.steps // 2)]
         est['throughput_metrics'][k] = {'mean': mean(mlist), 'std': stdev(mlist)}
 
       print_master(
-        f'For GBS={flags.global_batch_size}, MBS={cfg.micro_batch_size}, GAS={cfg.grad_accumulation_steps} works!'
+        f'For GBS={args.global_batch_size}, MBS={cfg.micro_batch_size}, GAS={cfg.grad_accumulation_steps} works!'
       )
       print_master(f'Estimated tokens-per-second={est["throughput_metrics"]["tokens_per_sec"]["mean"]}')
-      # print_master('Saving throughput logs and exiting.')
-      # with open(os.path.join(save_folder, 'throughput_analysis.json'), 'w') as f:
-      #   json.dump(est, f)
+      print_master('Saving throughput logs and exiting.')
+      with open(os.path.join(save_folder, 'throughput_analysis.json'), 'w') as f:
+        json.dump(est, f)
       done = True
 
     except torch.cuda.OutOfMemoryError:
@@ -141,8 +145,20 @@ def main(argv):
         print_master('Cannot fit any samples in memory. Nothing to save. Exiting.')
         done = True
 
+  if est is not None:
+    print('Results saved at', os.path.join(save_folder, 'throughput_analysis.json'))
   destroy_ddp()
 
 
 if __name__ == '__main__':
-  app.run(main)
+  # app.run(main)
+  # folder = '/fast/jsingh/projects/fastlm/june/results/attn'
+
+  p = lambda i, b: (
+    f'/fast/jsingh/projects/fastlm/june/results/attn/{i}/gbs_wise_results/gbs_{b}/throughput_analysis.json'
+  )
+
+  for ids in ['20M', '50M', '150M', '300M']:
+    for gbs in [16, 32, 64, 128, 256, 512]:
+      if not os.path.exists(p(ids, gbs)):
+        print(ids, gbs)
