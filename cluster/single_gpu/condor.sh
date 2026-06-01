@@ -1,9 +1,19 @@
 #!/bin/bash
 
 source ~/.bashrc
-source /fast/jsingh/envs/miniforge3/etc/profile.d/conda.sh
+echo $BASHRC_SRC_CHECK
+
+source /lustre/fast/fast/jsingh/envs/miniconda3/etc/profile.d/conda.sh
 conda activate pt
+echo "Checking if environment is indeed on..."
+pip show torch
+echo " "
+echo "Conda profile sourced and environment activated"
+
 cd /home/jsingh/projects/fastlm
+echo "setup done"
+
+nvidia-smi
 
 # Job specific vars
 config=$1

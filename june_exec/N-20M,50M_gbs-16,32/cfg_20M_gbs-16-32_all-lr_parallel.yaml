@@ -78,7 +78,7 @@ lr_end_pct: null
 log_every_steps: 1
 print_progress: True
 
-use_wandb: False
+use_wandb: True
 wandb_mode: "offline"
 wandb_project: "hparam-sweep"
 wandb_entity: "msc-thesis-jaisidh"
