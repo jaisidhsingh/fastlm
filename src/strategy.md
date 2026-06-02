@@ -22,7 +22,7 @@ We define a grid of $B=6$ global batch sizes $b \in \{16, 32, 64, 128, 256, 512\
 | **12B** |     |     | 64    | 128 | 256 | 512 |
 | **15B** |     |     | 64    | 128 | 256 | 512 |
 
-Since we want to use a fixed warmup of $2000$ steps, we further prune values of $b$ that will not allow this condition to be fulfilled. Hence, for each value of $N$ and $\eta$, we would only need to make a maximum of $\Beta$ training runs for all token budgets because we use WSD as our learning rate schedule (we can arrive at intermediate token budgets by decaying saved checkpoints). Note that we could have trained the model for 15B tokens for each batch size, however, this staggered approach allows for more savings in terms of total GPU-hours.
+Since we want to use a fixed warmup of $2000$ steps, we further prune values of $b$ that will not allow this condition to be fulfilled. Hence, for each value of $N$ and $\eta$, we would only need to make a maximum of $B$ training runs for all token budgets because we use WSD as our learning rate schedule (we can arrive at intermediate token budgets by decaying saved checkpoints). Note that we could have trained the model for 15B tokens for each batch size, however, this staggered approach allows for more savings in terms of total GPU-hours.
 
 ## 3. Determining micro batch size and gradient accumulation
 
