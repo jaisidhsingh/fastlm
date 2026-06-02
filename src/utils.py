@@ -52,6 +52,11 @@ def get_steps_from_chinchilla_multiplier(cfg, non_embed_params: int, world_size:
   return int(round(token_budget / (cfg.micro_batch_size * cfg.seq_len * cfg.grad_accumulation_steps * world_size)))
 
 
+def set_token_budget_id_from_gbs(cfg):
+  mp = SCALING_LADDER['batch_size_vs_token_budget_strategy']['staggered_runs']
+  cfg.token_budget_id = mp[cfg.global_batch_size]
+
+
 def get_steps_from_token_budget_id(cfg, world_size):
   tokens = float(cfg.token_budget_id[:-1]) * 1e9
   return int(round(tokens / (cfg.micro_batch_size * cfg.seq_len * cfg.grad_accumulation_steps * world_size)))

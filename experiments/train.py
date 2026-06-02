@@ -26,8 +26,11 @@ def main(argv):
 
   local_rank, world_size, device, master_process = pytorch_setup(cfg)
   utils.set_batch_sizes(cfg, world_size)
+  utils.set_token_budget_id_from_gbs(cfg)
+
+  print_master(f'Training an {cfg.arch_id.upper()} [{cfg.param_scale_id}] LLM on {cfg.token_budget_id} tokens.')
   print_master(
-    f'Training on {world_size} GPUs, GBS={cfg.global_batch_size}, MBS={cfg.micro_batch_size}, GAS={cfg.grad_accumulation_steps}'
+    f'Training on {world_size} GPUs, GBS={cfg.global_batch_size}, MBS={cfg.micro_batch_size}, GAS={cfg.grad_accumulation_steps}.'
   )
 
   if cfg.use_wandb and master_process:
