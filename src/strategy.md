@@ -12,7 +12,7 @@ We make a setup with $P=4$ budgets for parameter count $N$, i.e., $N \in \{20\te
 
 ## 2. Hyper-parameter sweep
 
-We define a grid of $\Beta=6$ global batch sizes $b \in \{16, 32, 64, 128, 256, 512\}$ and $\Eta=6$ learning rates $\eta \in \{0.0025,0.005,0.01,0.02,0.04,0.08\}$. Since, training each $(b, \eta)$ configuration on all $(N, D)$ values will be too costly, we use small batch sizes for small token budgets and large batch sizes for larger ones, reducing the set of candidate batch sizes to $4$ for each token budget. Additionally, we keep at least $3$ values common between the $4$ candidates of two adjacent token budgets. This creates the _staggered_ configuration given as follows:
+We define a grid of $B=6$ global batch sizes $b \in \{16, 32, 64, 128, 256, 512\}$ and $H=6$ learning rates $\eta \in \{0.0025,0.005,0.01,0.02,0.04,0.08\}$. Since, training each $(b, \eta)$ configuration on all $(N, D)$ values will be too costly, we use small batch sizes for small token budgets and large batch sizes for larger ones, reducing the set of candidate batch sizes to $4$ for each token budget. Additionally, we keep at least $3$ values common between the $4$ candidates of two adjacent token budgets. This creates the _staggered_ configuration given as follows:
 
 | **D**   |     |     | **b** |     |     |     |
 | ------- | --- | --- | ----- | --- | --- | --- |
@@ -34,13 +34,13 @@ $$
 
 Because we want to train as fast as possible, we iterate $gas$, i.e, $gas \in \{1, 2, 4, 8\}$ and for each, we set $mbs$ to be the maximum number of samples that each individual GPU can fit. Finally, we choose the $(mbs, gas)$ pair that maximizes throughput, measured via tokens per second (TPS).
 
-This results in us finding the configuration that will allow us to train as fast as possible on $N \times \Beta \times \Eta$ total settings. Additionally, throughput-profiling using TPS lets us estimate the GPU-hours required in advance.
+This results in us finding the configuration that will allow us to train as fast as possible on $N \times B \times H$ total settings. Additionally, throughput-profiling using TPS lets us estimate the GPU-hours required in advance.
 
 ## 4. Understand hyper-parameter scaling alongside compute
 
 This strategy allows us to create a grid of $(N,D)$ values, and look at the evolution of 3 quantities together:
 
-1. loss $\ell(N, D \mid b^*, \eta^*)$
+1. loss $\ell(N, D \mid b*, \eta*)$
 2. batch size $b$
 3. learning rate $\eta$
 
@@ -49,8 +49,8 @@ This strategy allows us to create a grid of $(N,D)$ values, and look at the evol
 This strategy outlines the plan for conducting scaling law experiments to ultimately understand the nuances of hybrid LLMs w.r.t existing studies on dense LLMs. Since OLMo Hybrid was trained and scaled using ladders and hyper-parameters from OLMo 3 (a purely dense LLM), there exists a gap verifying how hybrid LLMs behave w.r.t to their hyper-parameters when scaling pretraining. Upon running this strategy for hybrid LLMs of different hybridization ratios $r$, we would ideally hope to find hyper-parameters and loss as functions of this ratio
 
 1. $$\ell(N, D, r) = \frac{A(r)}{N^{\alpha(r)}} + \frac{B(r)}{D^{\beta(r)}} + E(r)$$
-2. $$b(r) = c_1 \cdot r^{x_1} \cdot N^{y_1} \cdot D^{z_1}$$
-3. $$\eta(r) = c_2 \cdot r^{x_2} \cdot N^{y_2} \cdot D^{z_2}$$
+2. $$b(r) = c_1 \cdot N^{r(y_1)} \cdot D^{r(z_1)}$$
+3. $$\eta(r) = c_2 \cdot N^{r(y_2)} \cdot D^{r(z_2)}$$
 
 ## Results folder structure for one parameter scale (per value of $N$)
 
