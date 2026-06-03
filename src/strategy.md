@@ -52,7 +52,7 @@ This strategy outlines the plan for conducting scaling law experiments to ultima
 2. $$b(r) = c_1 \cdot N^{r(y_1)} \cdot D^{r(z_1)}$$
 3. $$\eta(r) = c_2 \cdot N^{r(y_2)} \cdot D^{r(z_2)}$$
 
-## Results folder structure for one parameter scale (per value of $N$)
+## Infra: folder structure for one parameter scale (per value of $N$)
 
 ```plaintext
 parameter_scale_id/
@@ -146,3 +146,29 @@ GBS :	 Time x 6 LRs	   : DP : 	 GPU hours x 6 LRs
 Total time =  914.14 hours, assuming no runs in parallel
 Total GPU hours = 3077.56
 ```
+
+## Infra: result collection for analysis
+
+Since for each setting of $N, D, b, \eta$, we have a `metrics_<token_budget>.json` file containing training and validation metrics, we can then make a tensor of shape $P \times Q \times B \times H$ containg the validation loss at the end of each run.
+
+- P axis: parameter scales
+- Q axis: token budgets
+- B axis: global batch size
+- H axis: learning rate
+
+### What to plot:
+
+- Batch size (x-axis) versus validation loss (y-axis) under
+  - fixed $\eta=0.01$
+  - fixed $N$
+  - color of curve varies as per token budget $D$.
+
+- Learning rate (x-axis) versus validation loss (y-axis) under
+  - fixed $b=32$
+  - fixed $N$
+  - color of curve varies as per token budget $D$.
+
+- Token budget (x-axis) versus validation loss (y-axis) under
+  - fixed $b=32$
+  - best $\eta$
+  - color of curve varies as per param scale $N$
