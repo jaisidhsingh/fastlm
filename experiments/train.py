@@ -7,7 +7,7 @@ from absl import app, flags
 from torch.utils.flop_counter import FlopCounterMode
 
 from src import utils
-from src.checkpoint_utils import create_save_steps, maybe_load_checkpoint, save_checkpoint
+from src.checkpoint_utils import create_save_steps, load_metrics_from_checkpoint, maybe_load_checkpoint, save_checkpoint
 from src.data import get_dataloaders
 from src.engine import TorchEngine
 from src.models import construct_model
@@ -38,7 +38,7 @@ def main(argv):
     utils.log_job_info()
 
   # Load checkpoint
-  ckpt = maybe_load_checkpoint(cfg)
+  ckpt = maybe_load_checkpoint(cfg, world_size)
 
   # Dataset
   trainloader, validloader = get_dataloaders(cfg)
@@ -73,8 +73,9 @@ def main(argv):
   print_master(f'Training for {steps_budget} steps <=> {micro_step_budget} micro_steps')
   print_master(f'Evaluating every {cfg.eval_every_steps} for a total of {cfg.num_evals} eval points.')
 
-  # Start the dataloader from the correct micro-batch
-  step_start = cfg.resume_step if cfg.resume else 0
+  # Start the dataloader, but remember that the 2nd argument to enumerate only changes the index value.
+  # It DOES NOT skip over that many batches in the dataloader.
+  step_start = 0
   micro_step_start = step_start * cfg.grad_accumulation_steps
   print_master(
     f'=== Start Training from step: {step_start}/{steps_budget}, micro_step: {micro_step_start}/{micro_step_budget} ==='
@@ -82,20 +83,41 @@ def main(argv):
 
   # Bookkeeping
   metrics = defaultdict(list)
+  if ckpt is not None:
+    metrics = defaultdict(list, load_metrics_from_checkpoint(cfg, world_size))
+
   train_loss_array = []
 
   # Bookkeeping for throughput
   flops_per_micro_step = 0
   step_time = 0
 
+  resume_step = None
+  if ckpt is not None:
+    resume_step = ckpt['step']
+    cfg.resume_step = resume_step
+    cfg.save_last_checkpoint = False
+    reached_new_data = False
+    print_master(f'Resuming state from step={resume_step}, cooldown only={cfg.cooldown_only}')
+
   # When do we want to save
   exp_folder = utils.get_exp_dir_path(cfg, world_size)
   save_points = create_save_steps(cfg, world_size)
+  assert save_points is not None, "Save tracking is incorrect, & this is a problem even if we're not saving anything."
 
   # Training
   for micro_step, micro_batch in enumerate(trainloader, micro_step_start + 1):
     step = micro_step // cfg.grad_accumulation_steps
     is_step = micro_step % cfg.grad_accumulation_steps == 0
+
+    if resume_step is not None:
+      if step <= resume_step:
+        continue
+      else:
+        if not reached_new_data:
+          steps_budget += resume_step
+          reached_new_data = True
+
     if step > steps_budget and is_step:
       break
 

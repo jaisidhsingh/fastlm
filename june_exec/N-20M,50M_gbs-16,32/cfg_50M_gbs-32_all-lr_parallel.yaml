@@ -89,6 +89,7 @@ exp_name: "attn-20M_gbs-16-32"
 resume: False
 resume_step: null
 resume_exp_name: null
+cooldown_only: False
 
 save_last_checkpoint: True
 save_intermediate_checkpoints: True

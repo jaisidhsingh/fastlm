@@ -15,7 +15,7 @@ def create_save_steps(cfg, world_size):
   token_budget_ids_ref.sort()
   token_budget_ids_ref = [str(x) + 'B' for x in token_budget_ids_ref]
 
-  if not cfg.resume:
+  if not cfg.resume or (cfg.resume and not cfg.cooldown_only):
     # we want to save the start of the cooldown for all the intermediate token_budget_ids,
     # and for the last one, i.e. cfg.token_budget_id, we want to save when the cooldown starts + the final ckpt.
     index = token_budget_ids_ref.index(cfg.token_budget_id)
@@ -38,8 +38,10 @@ def create_save_steps(cfg, world_size):
 
     return {k: v for k, v in zip(points_to_save_at, names)}
 
-  else:
-    return {cfg.cooldown_steps: f'decayed_to_{cfg.token_budget_id.replace(".", "p")}'}
+  if cfg.resume and cfg.cooldown_only:
+    return {cfg.cooldown_steps + cfg.resume_step: f'decayed_to_{cfg.token_budget_id.replace(".", "p")}'}
+
+  return None
 
 
 def save_checkpoint(step, model, engine, cfg, metrics, name, world_size):
@@ -81,36 +83,26 @@ def save_checkpoint(step, model, engine, cfg, metrics, name, world_size):
     json.dump(dict(metrics), f)
 
 
-def maybe_load_checkpoint(cfg):
-  return None
-  """Each job_idx will restore where it left of."""
+def maybe_load_checkpoint(cfg, world_size):
   ckpt = None
 
   if cfg.resume:
-    # Paths are saved with utils.get_exp_dir_path(cfg), with global flags we can call that again from here
-    # but this will not control the job_idx name.
-    # If cfg.resume_exp_name is given, we will resume from that experiment name
-    # else, this will resume the exact sweep with only one config line!
-    # commented out because maybe it is not straightforward logic with current config design
-    # if cfg.resume_exp_name:
-    #   ckpt_dir = os.path.join(cfg.out_dir, cfg.resume_exp_name)
-    # else: # verbatim as it was saved
-    #   ckpt_dir = utils.get_exp_dir_path(cfg)
-
-    # notice that we can resume from `resume_exp_name`, but save to a different `exp_name`
-    resume_exp_name = cfg.resume_exp_name if cfg.resume_exp_name is not None else cfg.exp_name
-    ckpt_dir = os.path.join(cfg.out_dir, resume_exp_name)
-
-    # resume from a specified checkpoint or from the latest
-    if cfg.resume_step is not None:
-      ckpt_path = os.path.join(ckpt_dir, f'ckpt_step_{cfg.resume_step}.pth')
-    else:
-      ckpt_path = _latest_checkpoint(ckpt_dir, prefix='ckpt_step_')
-
-    # load checkpoint on cpu to later avoid OOM when intializing the model on device
-    # (an alternative design would be to initialize the model on `meta` device instead)
+    save_folder = utils.get_exp_dir_path(cfg, world_size)
+    ckpt_path = os.path.join(save_folder, f'ckpt_{cfg.resume_exp_name}.pt')
     print(f'Loading checkpoint from {ckpt_path}')
-    ckpt = torch.load(ckpt_path, map_location='cpu')
+    ckpt = torch.load(ckpt_path, map_location='cpu', weights_only=False)
+
+  return ckpt
+
+
+def load_metrics_from_checkpoint(cfg, world_size):
+  ckpt = None
+
+  if cfg.resume:
+    save_folder = utils.get_exp_dir_path(cfg, world_size)
+    ckpt_path = os.path.join(save_folder, f'metrics_{cfg.resume_exp_name}.json')
+    with open(ckpt_path) as f:
+      ckpt = json.load(f)
 
   return ckpt
 

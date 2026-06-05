@@ -137,6 +137,10 @@ class ScalingMetricTensor:
     return self._da.shape
 
   @property
+  def numel(self):
+    return self._da.size
+
+  @property
   def dims(self):
     return self._da.dims
 

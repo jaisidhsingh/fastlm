@@ -80,6 +80,8 @@ SCALING_LADDER = {
 
 SCALING_RESULTS_FOLDER = '/fast/jsingh/projects/fastlm/june/results/'
 
+ANALYSIS_RESULTS_FOLDER = '/home/jsingh/projects/fastlm/drawings/analyses'
+
 DEFAULT_CONFIG = {
   'deterministic': False,
   'seed': 42,
@@ -149,6 +151,7 @@ DEFAULT_CONFIG = {
   'resume': False,
   'resume_step': None,
   'resume_exp_name': None,
+  'cooldown_only': False,
   'save_last_checkpoint': False,
   'save_intermediate_checkpoints': False,
   'save_every_steps': 500,

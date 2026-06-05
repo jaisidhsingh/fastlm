@@ -9,6 +9,7 @@ from torch.utils.flop_counter import FlopCounterMode
 from src.data.data_prep_utils import intra_doc_causal_mask
 from src.models import get_param_groups
 from src.optim import initialize_scheduler, intialize_optimizer
+from src.optim.lr_schedule import LinearCooldown
 
 
 def _move_to_device(batch, seq_len, device, intra_doc_masking):
@@ -93,8 +94,17 @@ class TorchEngine(torch.nn.Module):
 
     if cfg.resume:
       self.optimizer.load_state_dict(ckpt['optimizer'])
-      self.scheduler.load_state_dict(ckpt['scheduler'])
       self.scaler.load_state_dict(ckpt['scaler'])
+      if not cfg.cooldown_only:
+        self.scheduler.load_state_dict(ckpt['scheduler'])
+      else:
+        self.scheduler = LinearCooldown(
+          self.optimizer,
+          lr_max=cfg.lr,
+          lr_end=cfg.lr_end if (cfg.lr_end is not None) else (cfg.lr_end_pct * cfg.lr),
+          cooldown_start_step=0,
+          cooldown_steps=cfg.cooldown_steps,
+        )
 
     # if cfg.count_flops:
     #   flop_counter = FlopCounterMode(self.model, display=False)

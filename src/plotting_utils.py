@@ -1,37 +1,18 @@
 import json
 import math
 import os
-from time import perf_counter
 
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
 
-from src.constants import SCALING_LADDER, SCALING_RESULTS_FOLDER
+from src.constants import ANALYSIS_RESULTS_FOLDER, SCALING_RESULTS_FOLDER
 from src.metric_tensor import ScalingMetricTensor
 
 sns.set_palette(sns.color_palette('rocket'))
 
-SQL = SCALING_LADDER['seq_len']
-PARAM_SCALES = [k for k in SCALING_LADDER['models'].keys()]
-TOKEN_BUDGETS = [k for k in SCALING_LADDER['batch_size_vs_token_budget_strategy']['staggered_grid'].keys()]
-BATCH_SIZES = SCALING_LADDER['batch_sizes']
-LEARNING_RATES = SCALING_LADDER['learning_rates']
 
-P = PARAM_SCALES[:2]
-Q = TOKEN_BUDGETS[:2]  # when heat_d
-B = BATCH_SIZES[:2]  # when heat_d
-H = LEARNING_RATES
-
-COORDS = {
-  'P': P,
-  'Q': Q,
-  'B': B,
-  'H': H,
-}
-
-
-def load_data(ns, ds, gbss, lrs, arch_id):
+def load_data(ns, ds, gbss, lrs, arch_id, coords):
   def load_one(n, d, gbs, lr, arch_id):
     folder = os.path.join(
       SCALING_RESULTS_FOLDER,
@@ -48,7 +29,7 @@ def load_data(ns, ds, gbss, lrs, arch_id):
     return min(da['valid/loss'])
 
   data = np.ones((len(ns), len(ds), len(gbss), len(lrs))) * 1e6
-  tensor = ScalingMetricTensor(data, COORDS)
+  tensor = ScalingMetricTensor(data, coords)
 
   for n in ns:
     for d in ds:
@@ -60,9 +41,9 @@ def load_data(ns, ds, gbss, lrs, arch_id):
   return tensor
 
 
-def loss_vs_lr_heat_gbs(metric_tensor, n, d, arch_id):
-  for gbs in B:
-    plt.plot(H, metric_tensor.at(P=n, Q=d, B=gbs), marker='o', label=r'$b=$' + str(gbs))
+def loss_vs_lr_heat_gbs(lrs, metric_tensor, n, d, arch_id, gbss):
+  for gbs in gbss:
+    plt.plot(lrs, metric_tensor.at(P=n, Q=d, B=gbs), marker='o', label=r'$b=$' + str(gbs))
 
   plt.xlim([2 ** (-9), 2 ** (-3)])
   plt.xscale('log', base=2)
@@ -77,9 +58,9 @@ def loss_vs_lr_heat_gbs(metric_tensor, n, d, arch_id):
   plt.clf()
 
 
-def loss_vs_lr_heat_d(metric_tensor, n, gbs, arch_id):
-  for d in Q:
-    plt.plot(H, metric_tensor.at(P=n, Q=d, B=gbs), marker='o', label=r'$D=$' + str(d))
+def loss_vs_lr_heat_d(lrs, metric_tensor, n, gbs, arch_id, ds):
+  for d in ds:
+    plt.plot(lrs, metric_tensor.at(P=n, Q=d, B=gbs), marker='o', label=r'$D=$' + str(d))
 
   plt.xlim([2 ** (-9), 2 ** (-3)])
   plt.xscale('log', base=2)
@@ -94,10 +75,10 @@ def loss_vs_lr_heat_d(metric_tensor, n, gbs, arch_id):
   plt.clf()
 
 
-def loss_vs_lr_heat_gbs_and_d(metric_tensor, n, arch_id):
-  for d in Q:
-    for gbs in B:
-      plt.plot(H, metric_tensor.at(P=n, Q=d, B=gbs), marker='o', label=r'$D=$' + str(d) + r', $b=$' + str(gbs))
+def loss_vs_lr_heat_gbs_and_d(lrs, metric_tensor, n, arch_id, ds, gbss):
+  for d in ds:
+    for gbs in gbss:
+      plt.plot(lrs, metric_tensor.at(P=n, Q=d, B=gbs), marker='o', label=r'$D=$' + str(d) + r', $b=$' + str(gbs))
 
   plt.xlim([2 ** (-9), 2 ** (-3)])
   plt.xscale('log', base=2)
@@ -112,9 +93,9 @@ def loss_vs_lr_heat_gbs_and_d(metric_tensor, n, arch_id):
   plt.clf()
 
 
-def loss_vs_lr_heat_n(metric_tensor, gbs, d, arch_id):
-  for n in P:
-    plt.plot(H, metric_tensor.at(P=n, Q=d, B=gbs), marker='o', label=r'$N=$' + str(n))
+def loss_vs_lr_heat_n(lrs, metric_tensor, gbs, d, arch_id, ns):
+  for n in ns:
+    plt.plot(lrs, metric_tensor.at(P=n, Q=d, B=gbs), marker='o', label=r'$N=$' + str(n))
 
   plt.xlim([2 ** (-9), 2 ** (-3)])
   plt.xscale('log', base=2)
@@ -129,10 +110,10 @@ def loss_vs_lr_heat_n(metric_tensor, gbs, d, arch_id):
   plt.clf()
 
 
-def loss_vs_lr_heat_n_and_gbs(metric_tensor, d, arch_id):
-  for n in P:
-    for gbs in B:
-      plt.plot(H, metric_tensor.at(P=n, Q=d, B=gbs), marker='o', label=r'$N=$' + str(n) + r', $b=$' + str(gbs))
+def loss_vs_lr_heat_n_and_gbs(lrs, metric_tensor, d, arch_id, ns, gbss):
+  for n in ns:
+    for gbs in gbss:
+      plt.plot(lrs, metric_tensor.at(P=n, Q=d, B=gbs), marker='o', label=r'$N=$' + str(n) + r', $b=$' + str(gbs))
 
   plt.xlim([2 ** (-9), 2 ** (-3)])
   plt.xscale('log', base=2)
@@ -147,10 +128,10 @@ def loss_vs_lr_heat_n_and_gbs(metric_tensor, d, arch_id):
   plt.clf()
 
 
-def loss_vs_lr_heat_n_and_d(metric_tensor, gbs, arch_id):
-  for n in P:
-    for d in Q:
-      plt.plot(H, metric_tensor.at(P=n, Q=d, B=gbs), marker='o', label=r'$N=$' + str(n) + r', $D=$' + str(d))
+def loss_vs_lr_heat_n_and_d(lrs, metric_tensor, gbs, arch_id, ns, ds):
+  for n in ns:
+    for d in ds:
+      plt.plot(lrs, metric_tensor.at(P=n, Q=d, B=gbs), marker='o', label=r'$N=$' + str(n) + r', $D=$' + str(d))
 
   plt.xlim([2 ** (-9), 2 ** (-3)])
   plt.xscale('log', base=2)
@@ -165,11 +146,11 @@ def loss_vs_lr_heat_n_and_d(metric_tensor, gbs, arch_id):
   plt.clf()
 
 
-def loss_vs_compute(metric_tensor, arch_id):
+def loss_vs_compute(metric_tensor, arch_id, ns, ds):
   xs = []
   ys = []
-  for n in P:
-    for d in Q:
+  for n in ds:
+    for d in ds:
       nval = float(n[:-1]) * 1e6
       dval = float(d[:-1]) * 1e9
       c = nval * dval * 6
@@ -199,28 +180,3 @@ def loss_vs_compute(metric_tensor, arch_id):
   plt.savefig(f'./drawings/plots/{arch_id.upper()}_loss_vs_compute.png', dpi=300, bbox_inches='tight')
   plt.cla()
   plt.clf()
-
-
-def main(arch_id):
-  metric_tensor = load_data(P, Q, B, H, arch_id)
-
-  loss_vs_compute(metric_tensor, arch_id)
-  # for gbs in B:
-  #   loss_vs_lr_heat_n_and_d(metric_tensor, gbs, arch_id)
-
-  # for n in P:
-  # for d in Q:
-  #   loss_vs_lr_heat_gbs(metric_tensor, n, d, arch_id)
-  #   loss_vs_lr_heat_gbs(metric_tensor, n, d, arch_id)
-  # for gbs in B:
-  #   loss_vs_lr_heat_d(metric_tensor, n, gbs, arch_id)
-  #   loss_vs_lr_heat_d(metric_tensor, n, gbs, arch_id)
-  # loss_vs_lr_heat_gbs_and_d(metric_tensor, n, arch_id)
-
-  # for d in Q:
-  #   for gbs in B:
-  #     loss_vs_lr_heat_n(metric_tensor, gbs, d, arch_id)
-
-
-if __name__ == '__main__':
-  main('attn')

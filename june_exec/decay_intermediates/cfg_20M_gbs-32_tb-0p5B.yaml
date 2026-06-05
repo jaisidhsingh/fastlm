@@ -22,13 +22,13 @@ eval_every_steps: -1
 
 ### MODEL config
 arch_id: "attn"
-param_scale_id: "50M"
+param_scale_id: "20M"
 model: "transformer"
-d_model: 384
+d_model: 256
 mlp_class: "glu"
 expand: "3.0"
-n_layers: 12
-n_heads: 8
+n_layers: 8
+n_heads: 4
 rms_norm: True
 tie_embeddings: True
 torch_compile: True
@@ -45,12 +45,12 @@ gdn_neg_eigval: True
 ### TRAINING RUN config
 
 # note: if steps_budget == -1, then steps_budget will internally be step to = chinchilla_token_multiplier * 20 * non_embed_params
-token_budget_id: "1.0B"
+token_budget_id: "0.5B"
 steps_budget: -1
 
 # note: this is micro batch size if grad_accumulation_steps>1
 # note: with ddp, effective batch size = micro_batch_size * grad_accumulation_steps * ddp_world_size
-global_batch_size: 16
+global_batch_size: 32
 micro_batch_size: -1
 grad_accumulation_steps: 1
 
@@ -67,6 +67,7 @@ beta1: 0.9
 beta2: 0.99
 grad_clip: 1.0
 
+# don't set this to anything other than `wsd`. for resume+cooldown, code will handle it internally
 scheduler: "wsd"
 warmup_steps: 2000
 cooldown_steps: 4000
@@ -78,19 +79,19 @@ lr_end_pct: null
 log_every_steps: 1
 print_progress: True
 
-use_wandb: True
+use_wandb: False
 wandb_mode: "offline"
 wandb_project: "hparam-sweep"
 wandb_entity: "msc-thesis-jaisidh"
 wandb_dir: "/fast/jsingh/projects/fastlm/june/wandb"
-wandb_run_name: "attn-50M_gbs-16-32"
-exp_name: "attn-50M_gbs-16-32"
+wandb_run_name: "attn-20M_gbs-32_cooldown_to_0p5B"
+exp_name: "attn-20M_gbs-32_cooldown_to_0p5B"
 
-resume: False
+resume: True
 resume_step: null
-resume_exp_name: null
-cooldown_only: False
+resume_exp_name: "decay_starts_to_0p5B"
+cooldown_only: True
 
-save_last_checkpoint: True
+save_last_checkpoint: False
 save_intermediate_checkpoints: True
 save_every_steps: 500
