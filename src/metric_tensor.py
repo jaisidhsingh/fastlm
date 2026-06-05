@@ -1,17 +1,36 @@
+from datasets.utils.file_utils import NonStreamableDatasetError
 import numpy as np
 import xarray as xr
 
+from src.constants import SCALING_LADDER
+
+
+def init_default_coords():
+  param_scales = list(SCALING_LADDER['models'].keys())
+  token_budgets = list(SCALING_LADDER['batch_size_vs_token_budget_strategy']['staggered_grid'].keys())
+  global_batch_sizes = SCALING_LADDER['batch_sizes']
+  learning_rates = SCALING_LADDER['learning_rates']
+
+  return {'n': param_scales, 'd': token_budgets, 'gbs': global_batch_sizes, 'lr': learning_rates}
+
 
 class ScalingMetricTensor:
-  def __init__(self, data, coords):
+  def __init__(self, data, coords=None:
     """
     coords = {
-        "P": [...],
-        "Q": [...],
-        "B": [...],
-        "H": [...],
+        "n": [...],
+        "d": [...],
+        "gbs": [...],
+        "lr": [...],
     }
     """
+    if coords is None:
+      coords = init_default_coords()
+    else:
+      pass
+
+    self.stored_coords = coords
+
     dims = tuple(coords.keys())
     expected_shape = tuple(len(coords[d]) for d in dims)
     data = np.asarray(data)
@@ -107,7 +126,13 @@ class ScalingMetricTensor:
   def std(self, axis):
     return self._wrap(self._da.std(dim=axis))
 
-  def argmin(self):
+  def argmin(self, axis):
+    return self._wrap(self._da.argmin(dim=axis))
+
+  def argmax(self, axis):
+    return self._wrap(self._da.argmax(dim=axis))
+
+  def argmin_full(self):
     flat_idx = np.nanargmin(self._da.values)
     unravel = np.unravel_index(flat_idx, self._da.shape)
     return {
@@ -118,7 +143,7 @@ class ScalingMetricTensor:
       )
     }
 
-  def argmax(self):
+  def argmax_full(self):
     flat_idx = np.nanargmax(self._da.values)
     unravel = np.unravel_index(flat_idx, self._da.shape)
     return {
@@ -187,15 +212,4 @@ class ScalingMetricTensor:
     return self._wrap(out)
 
   def set(self, value, **coords):
-    """
-    Coordinate-based assignment.
-    Example:
-        loss.set(
-            1.87,
-            P=160e6,
-            Q=4e9,
-            B=64,
-            H=3e-4,
-        )
-    """
     self._da.loc[coords] = value
