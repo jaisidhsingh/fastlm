@@ -85,32 +85,6 @@ class ExperimentManager:
 
     return results if len(results) > 0 else None
 
-  def create_configs_for_sweep(self):
-    pass
-
-  # def create_configs_for_sweep(self):
-  #   folder = os.path.join(self.experiment_folder, 'gbs_wise_results')
-  #   os.makedirs(folder, exist_ok=True)
-  #   checked = self.check_throughputs()
-
-  #   if checked is None:
-  #     print('Cannot create configs for sweep before throughput analysis is done. Exiting.')
-  #     return
-
-  #   for gbs in self.info['batch_sizes']:
-  #     tmp_cfg = deepcopy(DEFAULT_CONFIG)
-  #     tmp_cfg['micro_batch_size'] = checked[gbs]['mbs']
-  #     tmp_cfg['grad_accumulation_steps'] = checked[gbs]['gas']
-
-  #     save_folder = os.path.join(folder, f'gbs_{gbs}', 'lr_wise_configs')
-  #     os.makedirs(save_folder)
-  #     for lr in self.info['learning_rates']:
-  #       tmp_cfg['lr'] = lr
-
-  #       name = 'config_lr_' + str(lr).replace('.', 'p') + '.yaml'
-  #       with open(os.path.join(save_folder, name), 'w') as f:
-  #         yaml.safe_dump(tmp_cfg, f, sort_keys=False)
-
 
 def display_june_scaling_plan():
   lrs = SCALING_LADDER['learning_rates']

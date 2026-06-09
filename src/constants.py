@@ -119,7 +119,7 @@ DEFAULT_CONFIG = {
   # TRAINING
   'steps_budget': -1,
   'token_budget_id': '1.0B',
-  'micro_batch_size': 32,
+  'global_batch_size': 32,
   'grad_accumulation_steps': 1,
   'dtype': 'bfloat16',
   # OPTIMIZER
