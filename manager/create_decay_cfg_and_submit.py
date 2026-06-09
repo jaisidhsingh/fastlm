@@ -21,6 +21,7 @@ class MainConfigJob:
   n: str
   gbs: int
   lr: tp.Union[str, float]
+  cluster_id: tp.Union[str, int]
 
 
 def get_dp_value(n, gbs):
@@ -141,7 +142,8 @@ def main(cfg):
     text=True,  # return strings instead of bytes
   )
   if result.returncode == 0:
-    cluster_id = result.stdout.split(' submitted to cluster ')[-1]
+    cluster_id = result.stdout.split(' submitted to cluster ')[-1].replace('.', '')
+    cluster_id = int(cluster_id)
 
     # update our file that contains info about what we ran
     info = {
@@ -149,8 +151,8 @@ def main(cfg):
       'n': cfg.n,
       'gbs': cfg.gbs,
       'lr': 'all_parallel' if isinstance(lr, list) else lr,
-      'cfg': 'yes',
       'dp': get_dp_value(cfg.n, cfg.gbs),
+      'cfg': 'yes',
       'sub': 'yes',
       'cluster_id': cluster_id,
       'n_jobs': len(lr) if isinstance(lr, list) else 1,

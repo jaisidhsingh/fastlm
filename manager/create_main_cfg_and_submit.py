@@ -1,4 +1,5 @@
 import json
+import os
 import subprocess
 import typing as tp
 from copy import deepcopy
@@ -12,6 +13,7 @@ from src.constants import DEFAULT_CONFIG, SCALING_LADDER
 LR_FLOAT_TO_STR_MAP = {0.00025: '25e-5', 0.0005: '5e-4', 0.001: '1e-3', 0.002: '2e-3', 0.004: '4e-3', 0.008: '8e-3'}
 PARAM_SCALE_ID_TO_MEM_MAP = {'20M': 64, '50M': 72, '150M': 96, '300M': 128}
 DB_PATH = '/home/jsingh/projects/fastlm/execs/exec_db.csv'
+FOLDER = '/home/jsingh/projects/fastlm/execs'
 
 
 @dataclass
@@ -21,6 +23,12 @@ class MainConfigJob:
   n: str
   gbs: int
   lr: tp.Union[str, float]
+  cluster_id: tp.Union[str, int]
+
+
+def check_subfolders(cfg):
+  os.makedirs(os.path.join(FOLDER, cfg.arch_id), exist_ok=True)
+  os.makedirs(os.path.join(FOLDER, cfg.arch_id, cfg.n), exist_ok=True)
 
 
 def get_dp_value(n, gbs):
@@ -69,6 +77,8 @@ def get_config_content(arch_id, n, gbs, lr):
 
   # learning rate
   base_cfg['lr'] = lr
+  if n in ['150M', '300M']:
+    base_cfg['beta2'] = 0.95
 
   return base_cfg
 
@@ -110,6 +120,8 @@ def get_jobfile_content(arch_id, n, gbs, lr, cpus=8):
 
 
 def main(cfg):
+  check_subfolders(cfg)
+
   lr = None
   if isinstance(cfg.lr, str):
     if cfg.lr == 'all_parallel':
@@ -141,7 +153,8 @@ def main(cfg):
     text=True,  # return strings instead of bytes
   )
   if result.returncode == 0:
-    cluster_id = result.stdout.split(' submitted to cluster ')[-1]
+    cluster_id = result.stdout.split(' submitted to cluster ')[-1].replace('.', '')
+    cluster_id = int(cluster_id)
 
     # update our file that contains info about what we ran
     info = {
@@ -149,8 +162,8 @@ def main(cfg):
       'n': cfg.n,
       'gbs': cfg.gbs,
       'lr': 'all_parallel' if isinstance(lr, list) else lr,
-      'cfg': 'yes',
       'dp': get_dp_value(cfg.n, cfg.gbs),
+      'cfg': 'yes',
       'sub': 'yes',
       'cluster_id': cluster_id,
       'n_jobs': len(lr) if isinstance(lr, list) else 1,

@@ -85,7 +85,8 @@ ANALYSIS_RESULTS_FOLDER = '/home/jsingh/projects/fastlm/drawings/analyses'
 
 DEFAULT_CONFIG = {
   'deterministic': False,
-  'seed': 42,
+  'seed': 123,
+  'measure_throughput': False,
   # DATA
   'trainset_path': '/fast/jsingh/data/nemotron-cc-sample-mtsynth/tokenized_gpt2/ctx_2048/train',
   'vocab_size': 50304,
@@ -96,8 +97,11 @@ DEFAULT_CONFIG = {
   'num_workers': 4,
   'eval': True,
   'validset_path': '/fast/jsingh/data/nemotron-cc-sample-mtsynth/tokenized_gpt2/ctx_2048/valid',
-  'eval_every_steps': 50,
+  'num_evals': 20,
+  'eval_every_steps': -1,
   # MODEL
+  'arch_id': 'attn',
+  'param_scale_id': '20M',
   'model': 'transformer',
   'd_model': 256,
   'mlp_class': 'glu',
@@ -117,9 +121,10 @@ DEFAULT_CONFIG = {
   'gdn_gate': True,
   'gdn_neg_eigval': True,
   # TRAINING
-  'steps_budget': -1,
   'token_budget_id': '1.0B',
-  'global_batch_size': 32,
+  'steps_budget': -1,
+  'global_batch_size': 16,
+  'micro_batch_size': -1,
   'grad_accumulation_steps': 1,
   'dtype': 'bfloat16',
   # OPTIMIZER
@@ -128,32 +133,33 @@ DEFAULT_CONFIG = {
   'lr': 1e-3,
   'weight_decay': 0.1,
   'beta1': 0.9,
-  'beta2': 0.95,
+  'beta2': 0.99,
   'grad_clip': 1.0,
   # SCHEDULER
-  'scheduler': 'warmup_cosine',
-  'warmup_steps': 0.1,
-  'cooldown_steps': 0,
+  'scheduler': 'wsd',
+  'warmup_steps': 2000,
+  'cooldown_steps': 4000,
   'lr_start': 0.0,
   'lr_end': 1e-5,
   'lr_end_pct': None,
   # EXPERIMENT
   'log_every_steps': 1,
   'print_progress': True,
-  'use_wandb': False,
-  'wandb_mode': 'online',
+  # WANDB
+  'use_wandb': True,
+  'wandb_mode': 'offline',
   'wandb_project': 'hparam-sweep',
   'wandb_entity': 'msc-thesis-jaisidh',
   'wandb_dir': '/fast/jsingh/projects/fastlm/wandb',
-  'wandb_run_name': 'attn-20M',
-  'exp_name': 'hparam-sweep_attn-20M',
-  'out_dir': '/fast/jsingh/projects/fastlm/experiment_logs',
-  'over_write': True,
+  'wandb_run_name': 'attn-20M_gbs-16',
+  'exp_name': 'attn-20M_gbs-16',
+  # RESUME
   'resume': False,
   'resume_step': None,
   'resume_exp_name': None,
   'cooldown_only': False,
-  'save_last_checkpoint': False,
-  'save_intermediate_checkpoints': False,
+  # SAVING
+  'save_last_checkpoint': True,
+  'save_intermediate_checkpoints': True,
   'save_every_steps': 500,
 }
