@@ -1,0 +1,396 @@
+{
+  "add_prefix_space": false,
+  "added_tokens_decoder": {
+    "50256": {
+      "content": "<|endoftext|>",
+      "lstrip": false,
+      "normalized": true,
+      "rstrip": false,
+      "single_word": false,
+      "special": true
+    },
+    "50257": {
+      "content": "<pad_0>",
+      "lstrip": false,
+      "normalized": true,
+      "rstrip": false,
+      "single_word": false,
+      "special": false
+    },
+    "50258": {
+      "content": "<pad_1>",
+      "lstrip": false,
+      "normalized": true,
+      "rstrip": false,
+      "single_word": false,
+      "special": false
+    },
+    "50259": {
+      "content": "<pad_2>",
+      "lstrip": false,
+      "normalized": true,
+      "rstrip": false,
+      "single_word": false,
+      "special": false
+    },
+    "50260": {
+      "content": "<pad_3>",
+      "lstrip": false,
+      "normalized": true,
+      "rstrip": false,
+      "single_word": false,
+      "special": false
+    },
+    "50261": {
+      "content": "<pad_4>",
+      "lstrip": false,
+      "normalized": true,
+      "rstrip": false,
+      "single_word": false,
+      "special": false
+    },
+    "50262": {
+      "content": "<pad_5>",
+      "lstrip": false,
+      "normalized": true,
+      "rstrip": false,
+      "single_word": false,
+      "special": false
+    },
+    "50263": {
+      "content": "<pad_6>",
+      "lstrip": false,
+      "normalized": true,
+      "rstrip": false,
+      "single_word": false,
+      "special": false
+    },
+    "50264": {
+      "content": "<pad_7>",
+      "lstrip": false,
+      "normalized": true,
+      "rstrip": false,
+      "single_word": false,
+      "special": false
+    },
+    "50265": {
+      "content": "<pad_8>",
+      "lstrip": false,
+      "normalized": true,
+      "rstrip": false,
+      "single_word": false,
+      "special": false
+    },
+    "50266": {
+      "content": "<pad_9>",
+      "lstrip": false,
+      "normalized": true,
+      "rstrip": false,
+      "single_word": false,
+      "special": false
+    },
+    "50267": {
+      "content": "<pad_10>",
+      "lstrip": false,
+      "normalized": true,
+      "rstrip": false,
+      "single_word": false,
+      "special": false
+    },
+    "50268": {
+      "content": "<pad_11>",
+      "lstrip": false,
+      "normalized": true,
+      "rstrip": false,
+      "single_word": false,
+      "special": false
+    },
+    "50269": {
+      "content": "<pad_12>",
+      "lstrip": false,
+      "normalized": true,
+      "rstrip": false,
+      "single_word": false,
+      "special": false
+    },
+    "50270": {
+      "content": "<pad_13>",
+      "lstrip": false,
+      "normalized": true,
+      "rstrip": false,
+      "single_word": false,
+      "special": false
+    },
+    "50271": {
+      "content": "<pad_14>",
+      "lstrip": false,
+      "normalized": true,
+      "rstrip": false,
+      "single_word": false,
+      "special": false
+    },
+    "50272": {
+      "content": "<pad_15>",
+      "lstrip": false,
+      "normalized": true,
+      "rstrip": false,
+      "single_word": false,
+      "special": false
+    },
+    "50273": {
+      "content": "<pad_16>",
+      "lstrip": false,
+      "normalized": true,
+      "rstrip": false,
+      "single_word": false,
+      "special": false
+    },
+    "50274": {
+      "content": "<pad_17>",
+      "lstrip": false,
+      "normalized": true,
+      "rstrip": false,
+      "single_word": false,
+      "special": false
+    },
+    "50275": {
+      "content": "<pad_18>",
+      "lstrip": false,
+      "normalized": true,
+      "rstrip": false,
+      "single_word": false,
+      "special": false
+    },
+    "50276": {
+      "content": "<pad_19>",
+      "lstrip": false,
+      "normalized": true,
+      "rstrip": false,
+      "single_word": false,
+      "special": false
+    },
+    "50277": {
+      "content": "<pad_20>",
+      "lstrip": false,
+      "normalized": true,
+      "rstrip": false,
+      "single_word": false,
+      "special": false
+    },
+    "50278": {
+      "content": "<pad_21>",
+      "lstrip": false,
+      "normalized": true,
+      "rstrip": false,
+      "single_word": false,
+      "special": false
+    },
+    "50279": {
+      "content": "<pad_22>",
+      "lstrip": false,
+      "normalized": true,
+      "rstrip": false,
+      "single_word": false,
+      "special": false
+    },
+    "50280": {
+      "content": "<pad_23>",
+      "lstrip": false,
+      "normalized": true,
+      "rstrip": false,
+      "single_word": false,
+      "special": false
+    },
+    "50281": {
+      "content": "<pad_24>",
+      "lstrip": false,
+      "normalized": true,
+      "rstrip": false,
+      "single_word": false,
+      "special": false
+    },
+    "50282": {
+      "content": "<pad_25>",
+      "lstrip": false,
+      "normalized": true,
+      "rstrip": false,
+      "single_word": false,
+      "special": false
+    },
+    "50283": {
+      "content": "<pad_26>",
+      "lstrip": false,
+      "normalized": true,
+      "rstrip": false,
+      "single_word": false,
+      "special": false
+    },
+    "50284": {
+      "content": "<pad_27>",
+      "lstrip": false,
+      "normalized": true,
+      "rstrip": false,
+      "single_word": false,
+      "special": false
+    },
+    "50285": {
+      "content": "<pad_28>",
+      "lstrip": false,
+      "normalized": true,
+      "rstrip": false,
+      "single_word": false,
+      "special": false
+    },
+    "50286": {
+      "content": "<pad_29>",
+      "lstrip": false,
+      "normalized": true,
+      "rstrip": false,
+      "single_word": false,
+      "special": false
+    },
+    "50287": {
+      "content": "<pad_30>",
+      "lstrip": false,
+      "normalized": true,
+      "rstrip": false,
+      "single_word": false,
+      "special": false
+    },
+    "50288": {
+      "content": "<pad_31>",
+      "lstrip": false,
+      "normalized": true,
+      "rstrip": false,
+      "single_word": false,
+      "special": false
+    },
+    "50289": {
+      "content": "<pad_32>",
+      "lstrip": false,
+      "normalized": true,
+      "rstrip": false,
+      "single_word": false,
+      "special": false
+    },
+    "50290": {
+      "content": "<pad_33>",
+      "lstrip": false,
+      "normalized": true,
+      "rstrip": false,
+      "single_word": false,
+      "special": false
+    },
+    "50291": {
+      "content": "<pad_34>",
+      "lstrip": false,
+      "normalized": true,
+      "rstrip": false,
+      "single_word": false,
+      "special": false
+    },
+    "50292": {
+      "content": "<pad_35>",
+      "lstrip": false,
+      "normalized": true,
+      "rstrip": false,
+      "single_word": false,
+      "special": false
+    },
+    "50293": {
+      "content": "<pad_36>",
+      "lstrip": false,
+      "normalized": true,
+      "rstrip": false,
+      "single_word": false,
+      "special": false
+    },
+    "50294": {
+      "content": "<pad_37>",
+      "lstrip": false,
+      "normalized": true,
+      "rstrip": false,
+      "single_word": false,
+      "special": false
+    },
+    "50295": {
+      "content": "<pad_38>",
+      "lstrip": false,
+      "normalized": true,
+      "rstrip": false,
+      "single_word": false,
+      "special": false
+    },
+    "50296": {
+      "content": "<pad_39>",
+      "lstrip": false,
+      "normalized": true,
+      "rstrip": false,
+      "single_word": false,
+      "special": false
+    },
+    "50297": {
+      "content": "<pad_40>",
+      "lstrip": false,
+      "normalized": true,
+      "rstrip": false,
+      "single_word": false,
+      "special": false
+    },
+    "50298": {
+      "content": "<pad_41>",
+      "lstrip": false,
+      "normalized": true,
+      "rstrip": false,
+      "single_word": false,
+      "special": false
+    },
+    "50299": {
+      "content": "<pad_42>",
+      "lstrip": false,
+      "normalized": true,
+      "rstrip": false,
+      "single_word": false,
+      "special": false
+    },
+    "50300": {
+      "content": "<pad_43>",
+      "lstrip": false,
+      "normalized": true,
+      "rstrip": false,
+      "single_word": false,
+      "special": false
+    },
+    "50301": {
+      "content": "<pad_44>",
+      "lstrip": false,
+      "normalized": true,
+      "rstrip": false,
+      "single_word": false,
+      "special": false
+    },
+    "50302": {
+      "content": "<pad_45>",
+      "lstrip": false,
+      "normalized": true,
+      "rstrip": false,
+      "single_word": false,
+      "special": false
+    },
+    "50303": {
+      "content": "<pad_46>",
+      "lstrip": false,
+      "normalized": true,
+      "rstrip": false,
+      "single_word": false,
+      "special": false
+    }
+  },
+  "bos_token": "<|endoftext|>",
+  "clean_up_tokenization_spaces": false,
+  "eos_token": "<|endoftext|>",
+  "extra_special_tokens": {},
+  "model_max_length": 1024,
+  "tokenizer_class": "GPT2Tokenizer",
+  "unk_token": "<|endoftext|>"
+}

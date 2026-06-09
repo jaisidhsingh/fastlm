@@ -11,14 +11,8 @@ env/
 .venv/
 .env/
 
-# Ignore log files
+# Ignore any log files or temporary or sensitive files
 *.log
-
-# Ignore data files
-*.csv
-*.json
-
-# Ignore any other temporary or sensitive files
 *.tmp
 *.bak
 *.swp
