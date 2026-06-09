@@ -23,7 +23,7 @@ We recommend saving intermediate datasets to avoid re-downloading or re-tokenizi
 Example: preprocess FineWebEdu 10BT sample:
 ```
 python prepare.py \
-  --out_path=/fast/najroldi/data/lm/fwedu/fwedu_sample_10B_tokenizer_GPT2 \
+  --out_path=/fast/jsingh/data/fineweb_10BT_saved \
   --download --tokenize --chunk \
   --dataset_path='HuggingFaceFW/fineweb-edu' \
   --dataset_split=train \
@@ -73,8 +73,8 @@ from src.data.data_prep_utils import concat_chunck
 # prevents handle inheritance so the temp-dir can be removed safely.
 mp.set_start_method('spawn', force=True)
 
-flags.DEFINE_string('out_path', '/fast/najroldi/data/lm/fwedu/test', 'Path where to save the dataset.')
-flags.DEFINE_string('cache_path', '~/.cache/huggingface/datasets', 'Cache for download.')
+flags.DEFINE_string('out_path', '/fast/jsingh/data/test', 'Path where to save the dataset.')
+flags.DEFINE_string('cache_path', '/fast/jsingh/tmp', 'Cache for download.')
 
 flags.DEFINE_boolean('download', False, 'Download the raw dataset.')
 flags.DEFINE_boolean('tokenize', False, 'Tokenize the raw dataset.')
@@ -102,9 +102,9 @@ flags.DEFINE_boolean('save_tokenizer', False, 'Save the tokenizer to disk. Ignor
 
 FLAGS = flags.FLAGS
 
-TOKENIZER_MAP = { 
-    "gpt2": "/home/jsingh/projects/fastlm/tokenizer/better-gpt2",
-    "gpt-neox": "/home/jsingh/projects/fastlm/tokenizer/gpt-neox",
+TOKENIZER_MAP = {
+  'gpt2': '/home/jsingh/saved_tokenizers/better-gpt2',
+  'gpt-neox': '/home/jsingh/saved_tokenizers/gpt-neox',
 }
 
 
@@ -187,13 +187,13 @@ def main(_):
       raw_ds = load_from_disk(
         os.path.join(out_path, 'raw_dataset'),
       )
-      print("The full dataset has no. of rows = ", len(raw_ds))
+      print('The full dataset has no. of rows = ', len(raw_ds))
 
     # If one wants to tokenize a subset
     if FLAGS.nrows_tokenize is not None:
       nrows_tokenize = int(FLAGS.nrows_tokenize)
       raw_ds = raw_ds.take(nrows_tokenize)
-      print("We are tokenizing", FLAGS.nrows_tokenize, "rows")
+      print('We are tokenizing', FLAGS.nrows_tokenize, 'rows')
 
     # Shuffle so that multiproc has shards of similar size
     raw_ds = raw_ds.shuffle(seed=1996)
