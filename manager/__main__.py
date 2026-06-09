@@ -23,7 +23,7 @@ class MainConfigJob:
   n: str
   gbs: int
   lr: tp.Union[str, float]
-  cluster_id: tp.Union[str, int]
+  mode: str
 
 
 def check_subfolders(cfg):
@@ -46,17 +46,17 @@ def get_dp_value(n, gbs):
       return 8
 
 
-def get_config_path(arch_id, n, gbs, lr):
+def get_config_path(arch_id, n, gbs, lr, mode):
   lr_ext = 'all_parallel' if isinstance(lr, list) else LR_FLOAT_TO_STR_MAP[lr]
-  return f'/home/jsingh/projects/fastlm/execs/{arch_id}/{n}/cfg_gbs={gbs}_lr={lr_ext}.yaml'
+  return f'/home/jsingh/projects/fastlm/execs/{arch_id}/{n}/cfg-{mode}={gbs}_lr={lr_ext}.yaml'
 
 
-def get_jobfile_path(arch_id, n, gbs, lr):
+def get_jobfile_path(arch_id, n, gbs, lr, mode):
   lr_ext = 'all_parallel' if isinstance(lr, list) else LR_FLOAT_TO_STR_MAP[lr]
-  return f'/home/jsingh/projects/fastlm/execs/{arch_id}/{n}/condor-job_gbs={gbs}_lr={lr_ext}.sub'
+  return f'/home/jsingh/projects/fastlm/execs/{arch_id}/{n}/job-{mode}_gbs={gbs}_lr={lr_ext}.sub'
 
 
-def get_config_content(arch_id, n, gbs, lr):
+def get_config_content(arch_id, n, gbs, lr, mode):
   base_cfg = deepcopy(DEFAULT_CONFIG)
 
   # model specifications first
@@ -80,10 +80,14 @@ def get_config_content(arch_id, n, gbs, lr):
   if n in ['150M', '300M']:
     base_cfg['beta2'] = 0.95
 
+  # TODO: resume -> learning rate decay
+  if cfg.mode == 'decay':
+    pass
+
   return base_cfg
 
 
-def get_jobfile_content(arch_id, n, gbs, lr, cpus=8):
+def get_jobfile_content(arch_id, n, gbs, lr, mode, cpus=8):
   dp = get_dp_value(n, gbs)
   single_or_multi = 'single' if dp == 1 else 'multi'
   n_jobs = len(lr) if isinstance(lr, list) else 1
@@ -94,7 +98,7 @@ def get_jobfile_content(arch_id, n, gbs, lr, cpus=8):
   executable=/home/jsingh/projects/fastlm/cluster/{single_or_multi}_gpu/condor.sh
 
   # Hyperparmeters are specified in a YAML configuration file
-  # config={get_config_path(arch_id, n, gbs, lr)}
+  # config={get_config_path(arch_id, n, gbs, lr, mode)}
 
   # Queue as many jobs as points in the hyperaparameter grid
   n_jobs={n_jobs}
@@ -135,14 +139,14 @@ def main(cfg):
   assert lr is not None
 
   # first create and save the config
-  config_path = get_config_path(cfg.arch_id, cfg.n, cfg.gbs, lr)
-  config = get_config_content(cfg.arch_id, cfg.n, cfg.gbs, lr)
+  config_path = get_config_path(cfg.arch_id, cfg.n, cfg.gbs, lr, cfg.mode)
+  config = get_config_content(cfg.arch_id, cfg.n, cfg.gbs, lr, cfg.mode)
   with open(config_path, 'w') as f:
     json.dump(config, f)
 
   # then use this config path in the submission file
-  jobfile_path = get_jobfile_path(cfg.arch_id, cfg.n, cfg.abs, lr)
-  jobfile_content = get_jobfile_content(cfg.arch_id, cfg.n, cfg.gbs, lr)
+  jobfile_path = get_jobfile_path(cfg.arch_id, cfg.n, cfg.abs, lr, cfg.mode)
+  jobfile_content = get_jobfile_content(cfg.arch_id, cfg.n, cfg.gbs, lr, cfg.mode)
   with open(jobfile_path, 'w') as f:
     f.write(jobfile_content)
 
@@ -187,4 +191,5 @@ def main(cfg):
 
 if __name__ == '__main__':
   cfg = tyro.cli(MainConfigJob)
-  main(cfg)
+  print('main launching')
+  # main(cfg)
