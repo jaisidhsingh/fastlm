@@ -2,6 +2,8 @@ arch_id,n,gbs,lr,dp,main,decay,cfg,sub,cluster_id,n_jobs
 attn,20M,16,all_parallel,1,yes,no,yes,yes,17325009,6
 attn,50M,16,all_parallel,1,yes,no,yes,yes,17325010,6
 attn,20M,32,all_parallel,1,yes,no,yes,yes,17327538,6
-attn,50M,32,all_parallel,1,yes,no,yes,yes,17327539,6
 attn,20M,16,all_parallel,1,no,yes,yes,yes,17333214,6
 attn,20M,32,all_parallel,1,no,yes,yes,yes,17333215,12
+attn,50M,16,all_parallel,1,no,yes,yes,yes,17333328,6
+attn,50M,32,all_parallel,1,yes,no,yes,yes,17333386,6
+attn,50M,32,all_parallel,1,no,yes,yes,yes,17334009,12

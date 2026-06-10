@@ -1,0 +1,27 @@
+# Executable should be a full path
+executable=/home/jsingh/projects/fastlm/cluster/single_gpu/condor.sh
+
+# Hyperparmeters are specified in a YAML configuration file
+config=/lustre/home/jsingh/projects/fastlm/execs/attn/50M/cfg-main_gbs-32_lr-all_parallel.yaml
+
+# Queue as many jobs as points in the hyperaparameter grid
+n_jobs=6
+
+# Pass arguments to the executable
+arguments = $(config) $(Process) $(Cluster)
+
+# Logs
+LOGS_DIR=/fast/jsingh/logs/fastlm/june/attn
+
+error = $(LOGS_DIR)/err/job.$(Cluster).$(Process).err
+output = $(LOGS_DIR)/out/job.$(Cluster).$(Process).out
+log = $(LOGS_DIR)/log/job.$(Cluster).$(Process).log
+
+# Job requirements
+request_memory = 72G
+request_cpus = 8
+request_gpus = 1
+requirements = (TARGET.CUDADeviceName == "NVIDIA A100-SXM4-80GB" || TARGET.CUDADeviceName == "NVIDIA H100 80GB HBM3")
+
+queue $(n_jobs)
+  

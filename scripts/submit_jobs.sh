@@ -3,7 +3,7 @@
 cd /home/jsingh/projects/fastlm
 
 arch_id="attn"
-n="20M"
+n="50M"
 gbs=32
 lr="all_parallel"
 mode="decay"
