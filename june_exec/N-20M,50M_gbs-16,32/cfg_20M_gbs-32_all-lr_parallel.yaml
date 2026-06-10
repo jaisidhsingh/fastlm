@@ -83,8 +83,8 @@ wandb_mode: "offline"
 wandb_project: "hparam-sweep"
 wandb_entity: "msc-thesis-jaisidh"
 wandb_dir: "/fast/jsingh/projects/fastlm/june/wandb"
-wandb_run_name: "attn-20M_gbs-16-32"
-exp_name: "attn-20M_gbs-16-32"
+wandb_run_name: "attn-20M_gbs-32"
+exp_name: "attn-20M_gbs-32"
 
 resume: False
 resume_step: null

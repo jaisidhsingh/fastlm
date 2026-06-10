@@ -88,7 +88,12 @@ def maybe_load_checkpoint(cfg, world_size):
 
   if cfg.resume:
     save_folder = utils.get_exp_dir_path(cfg, world_size)
-    ckpt_path = os.path.join(save_folder, f'ckpt_{cfg.resume_exp_name}.pt')
+    if cfg.cooldown_only:
+      print('Only cooling down the learning rate.')
+      ckpt_path = os.path.join(save_folder, f'ckpt_decay_starts_to_{cfg.token_budget_id.replace(".", "p")}.pt')
+    else:
+      print('Resuming training in stable learning rate region.')
+      ckpt_path = os.path.join(save_folder, f'ckpt_{cfg.resume_exp_name}.pt')
     print(f'Loading checkpoint from {ckpt_path}')
     ckpt = torch.load(ckpt_path, map_location='cpu', weights_only=False)
 

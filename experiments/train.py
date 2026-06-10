@@ -101,7 +101,7 @@ def main(argv):
     print_master(f'Resuming state from step={resume_step}, cooldown only={cfg.cooldown_only}')
 
   # When do we want to save
-  exp_folder = utils.get_exp_dir_path(cfg, world_size)
+  # exp_folder = utils.get_exp_dir_path(cfg, world_size)
   save_points = create_save_steps(cfg, world_size)
   assert save_points is not None, "Save tracking is incorrect, & this is a problem even if we're not saving anything."
 

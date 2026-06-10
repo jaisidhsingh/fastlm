@@ -61,7 +61,7 @@ dtype: "bfloat16"
 ### OPTIMIZER config
 optim: "adamw"
 fused_optim: True
-lr: [0.0025, 0.005, 0.01, 0.02, 0.04, 0.08]
+lr: [0.00025, 0.0005, 0.001, 0.002, 0.004, 0.008]
 weight_decay: 0.1
 beta1: 0.9
 beta2: 0.99
@@ -84,8 +84,8 @@ wandb_mode: "offline"
 wandb_project: "hparam-sweep"
 wandb_entity: "msc-thesis-jaisidh"
 wandb_dir: "/fast/jsingh/projects/fastlm/june/wandb"
-wandb_run_name: "attn-20M_gbs-32_cooldown_to_1p0B"
-exp_name: "attn-20M_gbs-32_cooldown_to_1p0B"
+wandb_run_name: "attn-20M_gbs-32_cooldown"
+exp_name: "attn-20M_gbs-32_cooldown"
 
 resume: True
 resume_step: null

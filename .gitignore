@@ -31,5 +31,4 @@ fastlm.egg-info/
 manager_check/
 
 # Ignore logistic folders
-meetings/
-updates/
+trash/

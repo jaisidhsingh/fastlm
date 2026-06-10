@@ -1,4 +1,3 @@
-import json
 import os
 import subprocess
 import typing as tp
@@ -7,6 +6,7 @@ from dataclasses import dataclass
 
 import pandas as pd
 import tyro
+import yaml
 
 from src.constants import DEFAULT_CONFIG, SCALING_LADDER
 
@@ -17,13 +17,13 @@ FOLDER = '/home/jsingh/projects/fastlm/execs'
 
 
 @dataclass
-class MainConfigJob:
-  bid: int
-  arch_id: str
-  n: str
-  gbs: int
-  lr: tp.Union[str, float]
-  mode: str
+class ManagerConfig:
+  bid: int = 1
+  arch_id: str = 'attn'
+  n: str = '20M'
+  gbs: int = 32
+  lr: tp.Union[str, float] = 'all_parallel'
+  mode: str = 'main'
 
 
 def check_subfolders(cfg):
@@ -48,12 +48,12 @@ def get_dp_value(n, gbs):
 
 def get_config_path(arch_id, n, gbs, lr, mode):
   lr_ext = 'all_parallel' if isinstance(lr, list) else LR_FLOAT_TO_STR_MAP[lr]
-  return f'/home/jsingh/projects/fastlm/execs/{arch_id}/{n}/cfg-{mode}={gbs}_lr={lr_ext}.yaml'
+  return f'/lustre/home/jsingh/projects/fastlm/execs/{arch_id}/{n}/cfg-{mode}_gbs-{gbs}_lr-{lr_ext}.yaml'
 
 
 def get_jobfile_path(arch_id, n, gbs, lr, mode):
   lr_ext = 'all_parallel' if isinstance(lr, list) else LR_FLOAT_TO_STR_MAP[lr]
-  return f'/home/jsingh/projects/fastlm/execs/{arch_id}/{n}/job-{mode}_gbs={gbs}_lr={lr_ext}.sub'
+  return f'/lustre/home/jsingh/projects/fastlm/execs/{arch_id}/{n}/job-{mode}_gbs-{gbs}_lr-{lr_ext}.sub'
 
 
 def get_config_content(arch_id, n, gbs, lr, mode):
@@ -72,7 +72,7 @@ def get_config_content(arch_id, n, gbs, lr, mode):
   base_cfg['grad_accumulation_steps'] = 1
 
   # token budget
-  base_cfg['token_budget_id'] = SCALING_LADDER['batch_size_vs_token_budget_strategy']['staggered_grid'][gbs]
+  base_cfg['token_budget_id'] = SCALING_LADDER['batch_size_vs_token_budget_strategy']['staggered_runs'][gbs]
   base_cfg['steps_budget'] = -1
 
   # learning rate
@@ -80,50 +80,127 @@ def get_config_content(arch_id, n, gbs, lr, mode):
   if n in ['150M', '300M']:
     base_cfg['beta2'] = 0.95
 
-  # TODO: resume -> learning rate decay
-  if cfg.mode == 'decay':
-    pass
+  # saving
+  base_cfg['save_last_checkpoint'] = True
+  base_cfg['save_intermediate_checkpoints'] = True
+
+  # wandb
+  base_cfg['use_wandb'] = True
+  base_cfg['wandb_mode'] = 'offline'
+  base_cfg['wandb_run_name'] = f'{arch_id}-{n}_gbs-{gbs}'
+  base_cfg['exp_name'] = f'{arch_id}-{n}_gbs-{gbs}'
+
+  # resume -> learning rate decay (cooldown only)
+  if mode == 'decay':
+    full_token_budget_id = deepcopy(base_cfg['token_budget_id'])
+    token_budgets = list(SCALING_LADDER['batch_size_vs_token_budget_strategy']['staggered_grid'].keys())
+    full_budget_index = token_budgets.index(full_token_budget_id)
+    budgets_to_decay_at = token_budgets[:full_budget_index]
+
+    # we set `token_budget_id` key to a `list` type so that
+    # `utils.load_config` can split the list into individual runs
+    # and submit decays jobs in parallel. `checkpoint_utils` will use
+    # `token_budget_id` to load in the correct checkpoint
+    base_cfg['token_budget_id'] = budgets_to_decay_at
+    base_cfg['resume'] = True
+    base_cfg['resume_step'] = None
+    base_cfg['resume_exp_name'] = f'decay_starts_to_{full_token_budget_id.replace(".", "p")}'
+    base_cfg['cooldown_only'] = True
+    base_cfg['save_last_checkpoint'] = False
+    base_cfg['use_wandb'] = False
+    base_cfg['wandb_run_name'] = f'{arch_id}-{n}_gbs-{gbs}_cooldown'
+    base_cfg['exp_name'] = f'{arch_id}-{n}_gbs-{gbs}_cooldown'
 
   return base_cfg
 
 
-def get_jobfile_content(arch_id, n, gbs, lr, mode, cpus=8):
+def get_jobfile_content(arch_id, n, gbs, lr, n_jobs, mode, cpus=8):
   dp = get_dp_value(n, gbs)
   single_or_multi = 'single' if dp == 1 else 'multi'
-  n_jobs = len(lr) if isinstance(lr, list) else 1
   mem = PARAM_SCALE_ID_TO_MEM_MAP[n]
 
-  return f"""
-  # Executable should be a full path
-  executable=/home/jsingh/projects/fastlm/cluster/{single_or_multi}_gpu/condor.sh
+  return f"""# Executable should be a full path
+executable=/home/jsingh/projects/fastlm/cluster/{single_or_multi}_gpu/condor.sh
 
-  # Hyperparmeters are specified in a YAML configuration file
-  # config={get_config_path(arch_id, n, gbs, lr, mode)}
+# Hyperparmeters are specified in a YAML configuration file
+config={get_config_path(arch_id, n, gbs, lr, mode)}
 
-  # Queue as many jobs as points in the hyperaparameter grid
-  n_jobs={n_jobs}
+# Queue as many jobs as points in the hyperaparameter grid
+n_jobs={n_jobs}
 
-  # Pass arguments to the executable
-  arguments = $(config) $(Process) $(Cluster)
+# Pass arguments to the executable
+arguments = $(config) $(Process) $(Cluster)
 
-  # Logs
-  LOGS_DIR=/fast/jsingh/logs/fastlm/june/attn
+# Logs
+LOGS_DIR=/fast/jsingh/logs/fastlm/june/attn
 
-  error = $(LOGS_DIR)/err/job.$(Cluster).$(Process).err
-  output = $(LOGS_DIR)/out/job.$(Cluster).$(Process).out
-  log = $(LOGS_DIR)/log/job.$(Cluster).$(Process).log
+error = $(LOGS_DIR)/err/job.$(Cluster).$(Process).err
+output = $(LOGS_DIR)/out/job.$(Cluster).$(Process).out
+log = $(LOGS_DIR)/log/job.$(Cluster).$(Process).log
 
-  # Job requirements
-  request_memory = {mem}G
-  request_cpus = {cpus}
-  request_gpus = {dp}
-  requirements = (TARGET.CUDADeviceName == "NVIDIA A100-SXM4-80GB" || TARGET.CUDADeviceName == "NVIDIA H100 80GB HBM3")
+# Job requirements
+request_memory = {mem}G
+request_cpus = {cpus}
+request_gpus = {dp}
+requirements = (TARGET.CUDADeviceName == "NVIDIA A100-SXM4-80GB" || TARGET.CUDADeviceName == "NVIDIA H100 80GB HBM3")
 
-  queue $(n_jobs)
+queue $(n_jobs)
   """
 
 
-def main(cfg):
+def sanity_check():
+  cfg = ManagerConfig(n='20M', arch_id='attn', gbs=32, lr='all_parallel', bid=1, mode='sanity_check')
+  check_subfolders(cfg)
+
+  lr = None
+  if isinstance(cfg.lr, str):
+    if cfg.lr == 'all_parallel':
+      lr = SCALING_LADDER['learning_rates']
+    else:
+      raise NotImplementedError('No other string options supported for `cfg.lr`')
+  else:
+    assert isinstance(cfg.lr, float), 'Learning rate must either be a string `all_parallel` or a float.'
+    lr = cfg.lr
+
+  assert lr is not None
+
+  refs = {
+    'main': lambda x: (
+      '/lustre/home/jsingh/projects/fastlm/june_exec/N-20M,50M_gbs-16,32/cfg_20M_gbs-32_all-lr_parallel.yaml'
+    ),
+    'decay': lambda x: (
+      f'/lustre/home/jsingh/projects/fastlm/june_exec/decay_intermediates/cfg_20M_gbs-32_tb-{x.replace(".", "p")}.yaml'
+    ),
+  }
+
+  for mode in ['main', 'decay']:
+    cfg.mode = mode
+    config = get_config_content(cfg.arch_id, cfg.n, cfg.gbs, lr, cfg.mode)
+
+    if mode == 'main':
+      with open(refs['main'](None)) as f:
+        ref_config = dict(yaml.safe_load(f))
+
+      for k in config.keys():
+        assert k in ref_config and ref_config[k] == config[k], (
+          f'Key={k} erroneous: ref={ref_config[k]}, cfg={config[k]}'
+        )
+
+    else:
+      for tbid in config['token_budget_id']:
+        tmp_config = deepcopy(config)
+        tmp_config['token_budget_id'] = tbid
+        tmp_config['resume_exp_name'] = f'decay_starts_to_{tbid.replace(".", "p")}'
+        with open(refs['decay'](tbid)) as f:
+          ref_config = dict(yaml.safe_load(f))
+
+        for k in tmp_config.keys():
+          assert k in ref_config and ref_config[k] == tmp_config[k], (
+            f'Token budget id={tbid}, Key={k} erroneous, ref={ref_config[k]}, cfg={tmp_config[k]}'
+          )
+
+
+def main(cfg: ManagerConfig):
   check_subfolders(cfg)
 
   lr = None
@@ -142,11 +219,18 @@ def main(cfg):
   config_path = get_config_path(cfg.arch_id, cfg.n, cfg.gbs, lr, cfg.mode)
   config = get_config_content(cfg.arch_id, cfg.n, cfg.gbs, lr, cfg.mode)
   with open(config_path, 'w') as f:
-    json.dump(config, f)
+    yaml.safe_dump(config, f)
+
+  # count the number of parallel jobs to launch under the same cluster id
+  n_jobs = 1
+  for k, v in config.items():
+    if isinstance(v, list):
+      n_jobs *= len(v)
+  n_jobs = int(n_jobs)
 
   # then use this config path in the submission file
-  jobfile_path = get_jobfile_path(cfg.arch_id, cfg.n, cfg.abs, lr, cfg.mode)
-  jobfile_content = get_jobfile_content(cfg.arch_id, cfg.n, cfg.gbs, lr, cfg.mode)
+  jobfile_path = get_jobfile_path(cfg.arch_id, cfg.n, cfg.gbs, lr, cfg.mode)
+  jobfile_content = get_jobfile_content(cfg.arch_id, cfg.n, cfg.gbs, lr, n_jobs, cfg.mode)
   with open(jobfile_path, 'w') as f:
     f.write(jobfile_content)
 
@@ -157,7 +241,8 @@ def main(cfg):
     text=True,  # return strings instead of bytes
   )
   if result.returncode == 0:
-    cluster_id = result.stdout.split(' submitted to cluster ')[-1].replace('.', '')
+    print(result.stdout)
+    cluster_id = result.stdout.split(' cluster ')[-1][:-2]
     cluster_id = int(cluster_id)
 
     # update our file that contains info about what we ran
@@ -172,7 +257,7 @@ def main(cfg):
       'cfg': 'yes',
       'sub': 'yes',
       'cluster_id': cluster_id,
-      'n_jobs': len(lr) if isinstance(lr, list) else 1,
+      'n_jobs': n_jobs,
     }
     new_row = pd.DataFrame([info])
 
@@ -190,6 +275,6 @@ def main(cfg):
 
 
 if __name__ == '__main__':
-  cfg = tyro.cli(MainConfigJob)
-  print('main launching')
-  # main(cfg)
+  # sanity_check()
+  cfg = tyro.cli(ManagerConfig)
+  main(cfg)
