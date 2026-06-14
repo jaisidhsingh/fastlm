@@ -11,3 +11,7 @@ attn,150M,16,all_parallel,1,yes,no,yes,yes,17334565,6
 attn,150M,32,all_parallel,1,yes,no,yes,yes,17334566,6
 attn,300M,16,all_parallel,1,yes,no,yes,yes,17334589,6
 attn,300M,32,all_parallel,1,yes,no,yes,yes,17334591,6
+attn,150M,16,all_parallel,1,no,yes,yes,yes,17343666,6
+attn,150M,32,all_parallel,1,no,yes,yes,yes,17343667,12
+attn,300M,16,all_parallel,1,no,yes,yes,yes,17343668,6
+attn,300M,32,all_parallel,1,no,yes,yes,yes,17343669,12

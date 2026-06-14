@@ -3,10 +3,21 @@
 cd /home/jsingh/projects/fastlm
 
 arch_id="attn"
-n="300M"
-gbs=32
+n=("150M" "300M")
+gbs=(16 32)
 lr="all_parallel"
-mode="main"
-bid=1000
+mode="decay"
+bid=500
 
-python -m manager --arch_id=$arch_id --n=$n --gbs=$gbs --lr=$lr --mode=$mode --bid=$bid
+for psid in "${n[@]}"; do
+  for glbs in "${gbs[@]}"; do
+    python -m manager \
+      --arch_id $arch_id \
+      --n "$psid" \
+      --gbs "$glbs" \
+      --lr $lr \
+      --mode $mode \
+      --bid $bid;
+  done
+done
+
