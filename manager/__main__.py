@@ -119,6 +119,10 @@ def get_jobfile_content(arch_id, n, gbs, lr, n_jobs, mode, cpus=8):
   single_or_multi = 'single' if dp == 1 else 'multi'
   mem = PARAM_SCALE_ID_TO_MEM_MAP[n]
 
+  args = '$(config) $(Process) $(Cluster)'
+  if dp > 1:
+    args = args + ' $(dp)'
+
   return f"""# Executable should be a full path
 executable=/home/jsingh/projects/fastlm/cluster/{single_or_multi}_gpu/condor.sh
 
@@ -127,9 +131,10 @@ config={get_config_path(arch_id, n, gbs, lr, mode)}
 
 # Queue as many jobs as points in the hyperaparameter grid
 n_jobs={n_jobs}
+dp={dp}
 
 # Pass arguments to the executable
-arguments = $(config) $(Process) $(Cluster)
+arguments = {args}
 
 # Logs
 LOGS_DIR=/fast/jsingh/logs/fastlm/june/attn

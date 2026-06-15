@@ -9,6 +9,7 @@ import seaborn as sns
 
 from src.constants import SCALING_LADDER, SCALING_RESULTS_FOLDER
 from src.metric_tensor import ScalingMetricTensor
+from src.plotting.learning_rate import loss_vs_lr_heat_d, loss_vs_lr_heat_n
 
 sns.set_palette(sns.color_palette('rocket'))
 
@@ -18,16 +19,16 @@ TOKEN_BUDGETS = [k for k in SCALING_LADDER['batch_size_vs_token_budget_strategy'
 BATCH_SIZES = SCALING_LADDER['batch_sizes']
 LEARNING_RATES = SCALING_LADDER['learning_rates']
 
-P = PARAM_SCALES[:2]
-Q = TOKEN_BUDGETS[:2]  # when heat_d
+P = PARAM_SCALES
+Q = TOKEN_BUDGETS[1:2]  # when heat_d
 B = BATCH_SIZES[:2]  # when heat_d
 H = LEARNING_RATES
 
 COORDS = {
-  'P': P,
-  'Q': Q,
-  'B': B,
-  'H': H,
+  'n': P,
+  'd': Q,
+  'gbs': B,
+  'lr': H,
 }
 
 
@@ -55,171 +56,15 @@ def load_data(ns, ds, gbss, lrs, arch_id):
       for gbs in gbss:
         for lr in lrs:
           val = load_one(n, d, gbs, lr, arch_id)
-          tensor.set(val, P=n, Q=d, B=gbs, H=lr)
+          tensor.set(val, n=n, d=d, gbs=gbs, lr=lr)
 
   return tensor
 
 
-def loss_vs_lr_heat_gbs(metric_tensor, n, d, arch_id):
-  for gbs in B:
-    plt.plot(H, metric_tensor.at(P=n, Q=d, B=gbs), marker='o', label=r'$b=$' + str(gbs))
-
-  plt.xlim([2 ** (-9), 2 ** (-3)])
-  plt.xscale('log', base=2)
-  plt.xlabel(r'$\eta$')
-  plt.ylabel(r'$\mathcal{L}_{\text{valid}}$')
-
-  plt.title(f'{arch_id.upper()}, N={n}, D={d}')
-  plt.grid(True)
-  plt.legend()
-  plt.savefig(f'./drawings/plots/{arch_id.upper()}_loss_vs_lr_heat_gbs_N={n}_D={d}.png', dpi=300, bbox_inches='tight')
-  plt.cla()
-  plt.clf()
-
-
-def loss_vs_lr_heat_d(metric_tensor, n, gbs, arch_id):
-  for d in Q:
-    plt.plot(H, metric_tensor.at(P=n, Q=d, B=gbs), marker='o', label=r'$D=$' + str(d))
-
-  plt.xlim([2 ** (-9), 2 ** (-3)])
-  plt.xscale('log', base=2)
-  plt.xlabel(r'$\eta$')
-  plt.ylabel(r'$\mathcal{L}_{\text{valid}}$')
-
-  plt.title(f'{arch_id.upper()}, N={n}, ' + r'$b=$' + str(gbs))
-  plt.grid(True)
-  plt.legend()
-  plt.savefig(f'./drawings/plots/{arch_id.upper()}_loss_vs_lr_heat_d_N={n}_gbs={gbs}.png', dpi=300, bbox_inches='tight')
-  plt.cla()
-  plt.clf()
-
-
-def loss_vs_lr_heat_gbs_and_d(metric_tensor, n, arch_id):
-  for d in Q:
-    for gbs in B:
-      plt.plot(H, metric_tensor.at(P=n, Q=d, B=gbs), marker='o', label=r'$D=$' + str(d) + r', $b=$' + str(gbs))
-
-  plt.xlim([2 ** (-9), 2 ** (-3)])
-  plt.xscale('log', base=2)
-  plt.xlabel(r'$\eta$')
-  plt.ylabel(r'$\mathcal{L}_{\text{valid}}$')
-
-  plt.title(f'{arch_id.upper()}, N={n}')
-  plt.grid(True)
-  plt.legend()
-  plt.savefig(f'./drawings/plots/{arch_id.upper()}_loss_vs_lr_heat_gbs_and_d_N={n}.png', dpi=300, bbox_inches='tight')
-  plt.cla()
-  plt.clf()
-
-
-def loss_vs_lr_heat_n(metric_tensor, gbs, d, arch_id):
-  for n in P:
-    plt.plot(H, metric_tensor.at(P=n, Q=d, B=gbs), marker='o', label=r'$N=$' + str(n))
-
-  plt.xlim([2 ** (-9), 2 ** (-3)])
-  plt.xscale('log', base=2)
-  plt.xlabel(r'$\eta$')
-  plt.ylabel(r'$\mathcal{L}_{\text{valid}}$')
-
-  plt.title(f'{arch_id.upper()}, D={d}, ' + r'$b=$' + str(gbs))
-  plt.grid(True)
-  plt.legend()
-  plt.savefig(f'./drawings/plots/{arch_id.upper()}_loss_vs_lr_heat_n_gbs={gbs}_d={d}.png', dpi=300, bbox_inches='tight')
-  plt.cla()
-  plt.clf()
-
-
-def loss_vs_lr_heat_n_and_gbs(metric_tensor, d, arch_id):
-  for n in P:
-    for gbs in B:
-      plt.plot(H, metric_tensor.at(P=n, Q=d, B=gbs), marker='o', label=r'$N=$' + str(n) + r', $b=$' + str(gbs))
-
-  plt.xlim([2 ** (-9), 2 ** (-3)])
-  plt.xscale('log', base=2)
-  plt.xlabel(r'$\eta$')
-  plt.ylabel(r'$\mathcal{L}_{\text{valid}}$')
-
-  plt.title(f'{arch_id.upper()}, D={d}')
-  plt.grid(True)
-  plt.legend()
-  plt.savefig(f'./drawings/plots/{arch_id.upper()}_loss_vs_lr_heat_n_and_gbs_d={d}.png', dpi=300, bbox_inches='tight')
-  plt.cla()
-  plt.clf()
-
-
-def loss_vs_lr_heat_n_and_d(metric_tensor, gbs, arch_id):
-  for n in P:
-    for d in Q:
-      plt.plot(H, metric_tensor.at(P=n, Q=d, B=gbs), marker='o', label=r'$N=$' + str(n) + r', $D=$' + str(d))
-
-  plt.xlim([2 ** (-9), 2 ** (-3)])
-  plt.xscale('log', base=2)
-  plt.xlabel(r'$\eta$')
-  plt.ylabel(r'$\mathcal{L}_{\text{valid}}$')
-
-  plt.title(f'{arch_id.upper()}, ' + r'$b=$' + str(gbs))
-  plt.grid(True)
-  plt.legend()
-  plt.savefig(f'./drawings/plots/{arch_id.upper()}_loss_vs_lr_heat_n_and_d_gbs={gbs}.png', dpi=300, bbox_inches='tight')
-  plt.cla()
-  plt.clf()
-
-
-def loss_vs_compute(metric_tensor, arch_id):
-  xs = []
-  ys = []
-  for n in P:
-    for d in Q:
-      nval = float(n[:-1]) * 1e6
-      dval = float(d[:-1]) * 1e9
-      c = nval * dval * 6
-      xs.append(c)
-      lossval = metric_tensor.at(P=n, Q=d, B=32, H=0.0025)
-      ys.append(lossval)
-      plt.scatter(c, lossval)
-
-  xs = np.array(xs)
-  ys = np.array(ys)
-
-  logx = np.log(xs)
-  logy = np.log(ys)
-  b, a = np.polyfit(logx, logy, deg=1)
-
-  xfit = np.logspace(np.log10(xs.min()), np.log10(xs.max()), 200)
-  yfit = np.exp(a) * xfit**b
-  plt.plot(xfit, yfit, label='fit')
-
-  plt.xscale('log', base=10)
-  plt.yscale('log', base=10)
-  plt.xlabel(r'Compute')
-  plt.ylabel(r'$\mathcal{L}_{\text{valid}}$')
-
-  plt.title(f'{arch_id.upper()}, ' + r'$b=$' + str(32) + r', $\eta=$' + str(0.0025))
-  plt.grid(True)
-  plt.savefig(f'./drawings/plots/{arch_id.upper()}_loss_vs_compute.png', dpi=300, bbox_inches='tight')
-  plt.cla()
-  plt.clf()
-
-
 def main(arch_id):
-  metric_tensor = load_data(P, Q, B, H, arch_id)
-
-  loss_vs_compute(metric_tensor, arch_id)
-  # for gbs in B:
-  #   loss_vs_lr_heat_n_and_d(metric_tensor, gbs, arch_id)
-
-  # for n in P:
-  # for d in Q:
-  #   loss_vs_lr_heat_gbs(metric_tensor, n, d, arch_id)
-  #   loss_vs_lr_heat_gbs(metric_tensor, n, d, arch_id)
-  # for gbs in B:
-  #   loss_vs_lr_heat_d(metric_tensor, n, gbs, arch_id)
-  #   loss_vs_lr_heat_d(metric_tensor, n, gbs, arch_id)
-  # loss_vs_lr_heat_gbs_and_d(metric_tensor, n, arch_id)
-
-  # for d in Q:
-  #   for gbs in B:
-  #     loss_vs_lr_heat_n(metric_tensor, gbs, d, arch_id)
+  t = load_data(P, Q, B, H, arch_id)
+  for gbs in [32]:
+    loss_vs_lr_heat_n(t, gbs, '1.0B', arch_id)
 
 
 if __name__ == '__main__':

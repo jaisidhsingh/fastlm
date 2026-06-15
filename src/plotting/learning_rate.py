@@ -83,7 +83,7 @@ def loss_vs_lr_heat_n(metric_tensor: ScalingMetricTensor, gbs: int, d: str, arch
   for n in metric_tensor.stored_coords['n']:
     plt.plot(metric_tensor.stored_coords['lr'], metric_tensor.at(n=n, d=d, gbs=gbs), marker='o', label=r'$N=$' + str(n))
 
-  plt.xlim([2 ** (-9), 2 ** (-3)])
+  plt.xlim([2 ** (-13), 2 ** (-6)])
   plt.xscale('log', base=2)
   plt.xlabel(r'$\eta$')
   plt.ylabel(r'$\mathcal{L}_{\text{valid}}$')

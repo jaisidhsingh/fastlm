@@ -1,6 +1,6 @@
-from datasets.utils.file_utils import NonStreamableDatasetError
 import numpy as np
 import xarray as xr
+from datasets.utils.file_utils import NonStreamableDatasetError
 
 from src.constants import SCALING_LADDER
 
@@ -15,7 +15,7 @@ def init_default_coords():
 
 
 class ScalingMetricTensor:
-  def __init__(self, data, coords=None:
+  def __init__(self, data, coords=None):
     """
     coords = {
         "n": [...],
