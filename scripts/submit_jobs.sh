@@ -2,12 +2,12 @@
 
 cd /home/jsingh/projects/fastlm
 
-arch_id="attn"
-n=("150M" "300M")
+arch_id="gdn"
+n=("20M" "50M")
 gbs=(16 32)
 lr="all_parallel"
-mode="decay"
-bid=500
+mode="main"
+bid=250
 
 for psid in "${n[@]}"; do
   for glbs in "${gbs[@]}"; do
