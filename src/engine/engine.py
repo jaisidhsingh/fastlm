@@ -6,7 +6,7 @@ from torch.nn import CrossEntropyLoss
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.flop_counter import FlopCounterMode
 
-from src.data.data_prep_utils import intra_doc_causal_mask
+from src.data.data_prep_utils import intra_doc_causal_mask, intra_doc_masking_linear
 from src.models import get_param_groups
 from src.optim import initialize_scheduler, intialize_optimizer
 from src.optim.lr_schedule import LinearCooldown
@@ -14,6 +14,7 @@ from src.optim.lr_schedule import LinearCooldown
 
 def _move_to_device(batch, seq_len, device, intra_doc_masking):
   """Slice batch to get inputs and targets, and move them to device."""
+  bsz = batch['input_ids'].shape[0]
 
   inputs = batch['input_ids'][:, :seq_len]  # WE WILL CHOP OFF THE LAST ONE FROM THE LOGITS
   targets = batch['input_ids'][:, 1:seq_len]  # WE ALWAYS MAKE LABELS FROM INPUTS: HF-STYLE
@@ -27,8 +28,33 @@ def _move_to_device(batch, seq_len, device, intra_doc_masking):
     masks = [intra_doc_causal_mask(doc_lengths, seq_len + 1, device) for doc_lengths in batch['docs_lengths']]
     attn_mask = torch.stack(masks, dim=0)  # (bsz, L+1, L+1)
     attn_mask = attn_mask[:, :seq_len, :seq_len].contiguous()  # (bsz, L, L)
+
+    # masking and cu_seqlens for linear attention
+    linear_mask_info = [
+      intra_doc_masking_linear(doc_lengths, seq_len + 1, device) for doc_lengths in batch['docs_lengths']
+    ]
+    linear_masks = [item[0] for item in linear_mask_info]
+    linear_masks = torch.cat(linear_masks, dim=0)
+    linear_masks = linear_masks[:, :seq_len]
+
+    boundaries = [subitem for doc_lengths in batch['docs_lengths'] for subitem in [0] + doc_lengths]
+    flat_lengths = [l for docs in batch['docs_lengths'] for l in docs]
+    cu_seqlens = torch.zeros(len(flat_lengths) + 1, dtype=torch.int32, device=device)
+    cu_seqlens[1:] = torch.cumsum(torch.tensor(flat_lengths, device=device), dim=0)
+
+    limit = int(bsz * seq_len)
+    valid = cu_seqlens <= limit
+    cu_seqlens = cu_seqlens[valid]
+
+    if cu_seqlens[-1] != limit:
+      cu_seqlens = torch.tensor(cu_seqlens.tolist() + [limit]).to(dtype=torch.int32, device=device)
+
+    assert cu_seqlens.argmax() == cu_seqlens.shape[0] - 1, cu_seqlens
+
   else:
     attn_mask = torch.tril(torch.ones(seq_len, seq_len)).repeat(batch['input_ids'].shape[0], 1, 1).to(dtype=torch.bool)
+    linear_masks = torch.ones((bsz, seq_len), dtype=torch.bool, device=device)
+    cu_seqlens = None
 
   if 'cuda' in device:
     # pin arrays allows to move them to GPU asynchronously (non_blocking=True)
@@ -38,7 +64,7 @@ def _move_to_device(batch, seq_len, device, intra_doc_masking):
     inputs, targets = inputs.to(device), targets.to(device)
   attn_mask = attn_mask.to(device=device)
 
-  return inputs, targets, attn_mask
+  return inputs, targets, attn_mask, linear_masks, cu_seqlens
 
 
 class TorchEngine(torch.nn.Module):
@@ -117,7 +143,9 @@ class TorchEngine(torch.nn.Module):
     self.micro_steps += 1
     self.accumulated_samples += 1
 
-    inputs, targets, attn_mask = _move_to_device(batch, self.seq_len, self.device, self.intra_doc_masking)
+    inputs, targets, attn_mask, linear_mask, cu_seqlens = _move_to_device(
+      batch, self.seq_len, self.device, self.intra_doc_masking
+    )
 
     # sync (reduce) gradients at the last accumulation step
     if torch.distributed.is_initialized():
@@ -125,7 +153,7 @@ class TorchEngine(torch.nn.Module):
 
     # forward pass with autocasting
     with self.ctx:
-      output = self.model(inputs, attn_mask)
+      output = self.model(inputs, attn_mask, linear_mask, cu_seqlens)
       logits = getattr(output, 'logits', output)
       loss = self.criterion(
         logits[:, :-1, :].reshape(-1, logits.size(-1)).contiguous(), targets.reshape(-1).contiguous()
@@ -171,9 +199,11 @@ class TorchEngine(torch.nn.Module):
     total_loss = 0.0
     num_batches = 0
     for batch in dataloader:
-      inputs, targets, attn_mask = _move_to_device(batch, self.seq_len, self.device, self.intra_doc_masking)
+      inputs, targets, attn_mask, linear_mask, cu_seqlens = _move_to_device(
+        batch, self.seq_len, self.device, self.intra_doc_masking
+      )
       with self.ctx:
-        output = self.model(inputs, attn_mask)
+        output = self.model(inputs, attn_mask, linear_mask, cu_seqlens)
         logits = getattr(output, 'logits', output)
         loss = self.criterion(
           logits[:, :-1, :].reshape(-1, logits.size(-1)).contiguous(), targets.reshape(-1).contiguous()

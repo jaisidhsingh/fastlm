@@ -1,6 +1,7 @@
 import math
 import os
 import shutil
+import typing as tp
 from collections import namedtuple
 from itertools import product
 from types import SimpleNamespace
@@ -23,13 +24,23 @@ GPU_PEAK_FLOPS_PER_SEC_MAP = {
 }
 
 
-def parse_arch_id(arch_id):
+def parse_arch_id(arch_id: str) -> tp.Tuple[str, int]:
+  # for example:
+  #   pure attention: arch_id = "attn"
+  #   pure gdn: arch_id = "gdn"
+  #   hybrid with gdn:attn = r:1 : arch_id = "hybrid_r-1"
   split_id = arch_id.split('_')
   arch = split_id[0]
   ratio = 1
   if len(split_id) == 2:
-    ratio = int(split_id[1].split('-')[-1])
+    ratio = int(split_id[1].split('-')[0])
   return arch, ratio
+
+
+def set_arch(cfg):
+  arch, ratio = parse_arch_id(cfg.arch_id)
+  cfg.token_mixer = arch
+  cfg.hybrid_mixer_ratio = ratio
 
 
 def set_eval_every(cfg):
@@ -147,8 +158,7 @@ def _matching_wandb_run_exists(cfg):
 
 def get_exp_dir_path(cfg, world_size):
   gbs = int(cfg.micro_batch_size * cfg.grad_accumulation_steps * world_size)
-  arch, ratio = parse_arch_id(cfg.arch_id)
-  gbs_folder = os.path.join(SCALING_RESULTS_FOLDER, arch, cfg.param_scale_id, 'gbs_wise_results', f'gbs_{gbs}')
+  gbs_folder = os.path.join(SCALING_RESULTS_FOLDER, cfg.arch_id, cfg.param_scale_id, 'gbs_wise_results', f'gbs_{gbs}')
   exp_folder = os.path.join(gbs_folder, 'checkpoints', f'lr_{str(cfg.lr).replace(".", "p")}')
   os.makedirs(exp_folder, exist_ok=True)
   return exp_folder

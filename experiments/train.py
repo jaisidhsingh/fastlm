@@ -25,6 +25,7 @@ def main(argv):
   cfg, _ = utils.load_config(CFG_PATH)
 
   local_rank, world_size, device, master_process = pytorch_setup(cfg)
+  utils.set_arch(cfg)
   utils.set_batch_sizes(cfg, world_size)
   utils.set_token_budget_id_from_gbs(cfg)
 
@@ -50,6 +51,7 @@ def main(argv):
   print_master(
     f'Initialized model with {round(non_embed_params / 1e6, 2)}M non-embedding params, or, {round(total_params / 1e6)}M total params'
   )
+  print(model)
 
   # Engine
   steps_budget = utils.get_steps_budget(cfg, world_size)

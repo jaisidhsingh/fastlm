@@ -1,7 +1,7 @@
-import torch
-
 from itertools import chain
-from typing import Dict, List, Any
+from typing import Any, Dict, List
+
+import torch
 
 
 def intra_doc_causal_mask(doc_boundaries: list, max_seq_length: int, device='cpu') -> torch.Tensor:
@@ -21,6 +21,32 @@ def intra_doc_causal_mask(doc_boundaries: list, max_seq_length: int, device='cpu
   block_diagonal_mask_bool = torch.block_diag(*sub_masks_bool)
 
   return block_diagonal_mask_bool
+
+
+def intra_doc_masking_linear(
+  doc_boundaries: list[int],
+  max_seq_length: int,
+  device: str = 'cpu',
+) -> tuple[torch.Tensor, torch.Tensor]:
+  """
+  Produce the attention_mask and cu_seqlens needed for intra-doc masking
+  in fla linear attention models (e.g. GatedDeltaNet). For linear attention,
+  causal structure comes from the recurrence, not a matrix mask. Intra-doc
+  masking means resetting recurrent state at document boundaries, which is
+  communicated via cu_seqlens (not the attention_mask).
+  """
+  if sum(doc_boundaries) != max_seq_length:
+    raise ValueError('Sum of doc_boundaries does not match max_seq_length.')
+
+  # All tokens are real (no padding in packed-document setting)
+  attention_mask = torch.ones((1, max_seq_length), dtype=torch.bool, device=device)
+
+  # Cumulative boundaries: [0, d0, d0+d1, ..., T]
+  # boundaries = [0] + list(torch.cumsum(torch.tensor(doc_boundaries), dim=0).tolist())
+  # cu_seqlens = torch.tensor(boundaries, dtype=torch.int32, device=device)
+
+  boundaries = [0] + doc_boundaries
+  return attention_mask, boundaries
 
 
 def _get_docs_boundaries(doc_lengths: List[int], n_chunks: int, max_seq_length: int) -> List[List[int]]:

@@ -27,17 +27,22 @@ from fla.models.linear_attn import LinearAttentionConfig, LinearAttentionForCaus
 from fla.models.log_linear_mamba2 import LogLinearMamba2Config, LogLinearMamba2ForCausalLM, LogLinearMamba2Model
 from fla.models.mamba import MambaConfig, MambaForCausalLM, MambaModel
 from fla.models.mamba2 import Mamba2Config, Mamba2ForCausalLM, Mamba2Model
+from fla.models.mamba3 import Mamba3Config, Mamba3ForCausalLM, Mamba3Model
 from fla.models.mesa_net import MesaNetConfig, MesaNetForCausalLM, MesaNetModel
 from fla.models.mla import MLAConfig, MLAForCausalLM, MLAModel
+from fla.models.moba import MoBAConfig, MoBAForCausalLM, MoBAModel
 from fla.models.mom import MomConfig, MomForCausalLM, MomModel
 from fla.models.nsa import NSAConfig, NSAForCausalLM, NSAModel
 from fla.models.path_attn import PaTHAttentionConfig, PaTHAttentionForCausalLM, PaTHAttentionModel
+from fla.models.raven import RavenConfig, RavenForCausalLM, RavenModel
 from fla.models.retnet import RetNetConfig, RetNetForCausalLM, RetNetModel
 from fla.models.rodimus import RodimusConfig, RodimusForCausalLM, RodimusModel
 from fla.models.rwkv6 import RWKV6Config, RWKV6ForCausalLM, RWKV6Model
 from fla.models.rwkv7 import RWKV7Config, RWKV7ForCausalLM, RWKV7Model
 from fla.models.samba import SambaConfig, SambaForCausalLM, SambaModel
 from fla.models.transformer import TransformerConfig, TransformerForCausalLM, TransformerModel
+from fla.models.wall_transformer import WallTransformerConfig, WallTransformerForCausalLM, WallTransformerModel
+from fla.models.yoco import YOCOConfig, YOCOForCausalLM, YOCOModel
 
 __all__ = [
     'ABCConfig',
@@ -94,12 +99,18 @@ __all__ = [
     'Mamba2Config',
     'Mamba2ForCausalLM',
     'Mamba2Model',
+    'Mamba3Config',
+    'Mamba3ForCausalLM',
+    'Mamba3Model',
     'MambaConfig',
     'MambaForCausalLM',
     'MambaModel',
     'MesaNetConfig',
     'MesaNetForCausalLM',
     'MesaNetModel',
+    'MoBAConfig',
+    'MoBAForCausalLM',
+    'MoBAModel',
     'MomConfig',
     'MomForCausalLM',
     'MomModel',
@@ -115,6 +126,9 @@ __all__ = [
     'RWKV7Config',
     'RWKV7ForCausalLM',
     'RWKV7Model',
+    'RavenConfig',
+    'RavenForCausalLM',
+    'RavenModel',
     'RetNetConfig',
     'RetNetForCausalLM',
     'RetNetModel',
@@ -127,4 +141,10 @@ __all__ = [
     'TransformerConfig',
     'TransformerForCausalLM',
     'TransformerModel',
+    'WallTransformerConfig',
+    'WallTransformerForCausalLM',
+    'WallTransformerModel',
+    'YOCOConfig',
+    'YOCOForCausalLM',
+    'YOCOModel',
 ]

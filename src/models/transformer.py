@@ -25,10 +25,8 @@ class ModelConfig:
 
   # if there is not `+` symbol in the string below, the model is instantiated as a pure (non-hybrid) model
   token_mixer: str = 'gdn+attn'
-  hybrid_mixer_ratio: int = 3
   # means 3:1 (one attention after every 3 gdn layers, type before the + symbol is the "every ratio layers")
-  token_mixer_pattern: str = None
-  # use this for more fine-grained control over layer arrangement
+  hybrid_mixer_ratio: int = 3
   layer_norm_scaling: bool = False
   residual_connection: str = 'add'
   attn_gate: bool = True
@@ -37,6 +35,8 @@ class ModelConfig:
   gdn_conv_size: int = 4
   gdn_gate: bool = True
   gdn_neg_eigval: bool = True
+
+  intra_doc: bool = False
 
 
 MLP_CLASSES = {'mlp': MLP, 'glu': GLU, 'mlp_relu_sq': MLPReluSquared}
@@ -119,6 +119,7 @@ class Block(nn.Module):
         allow_neg_eigval=cfg.gdn_neg_eigval,
         use_gate=cfg.gdn_gate,
         conv_size=cfg.gdn_conv_size,
+        intra_doc=cfg.intra_doc,
       )
     self.mlp = MLP_CLASSES[cfg.mlp](dim=cfg.dim, hidden_dim=int(cfg.expand * cfg.dim))
 
@@ -134,7 +135,7 @@ class Block(nn.Module):
       self.attn_mhc = lambda x: x
       self.mlp_mhc = lambda x: x
 
-  def forward(self, x, freqs_cis, attention_mask):
+  def forward(self, x, freqs_cis, attention_mask, linear_mask, cu_seqlens):
     # x: (bsz, seqlen, dim)
     if self.residual_connection == 'add':
       scaling = 1.0 if not self.layer_norm_scaling else 1 / math.sqrt(self.layer_id + 1)
@@ -144,14 +145,9 @@ class Block(nn.Module):
         o = self.token_mixer(scaling * self.token_mixer_norm(x), freqs_cis, attention_mask)
 
       elif isinstance(self.token_mixer, GatedDeltaNet):
-        if attention_mask.ndim == 3:
-          o, _, past_key_values = self.token_mixer(
-            hidden_states=scaling * self.token_mixer_norm(x), attention_mask=attention_mask[:, :, 0]
-          )
-        elif attention_mask.ndim == 2:
-          o, _, past_key_values = self.token_mixer(
-            hidden_states=scaling * self.token_mixer_norm(x), attention_mask=attention_mask
-          )
+        o, _, past_key_values = self.token_mixer(
+          hidden_states=scaling * self.token_mixer_norm(x), attention_mask=linear_mask, cu_seqlens=cu_seqlens
+        )
 
       else:
         raise NotImplementedError('Unsupported value encountered for `cfg.token_mixer`')
@@ -169,6 +165,7 @@ class Block(nn.Module):
 class Transformer(nn.Module):
   def __init__(self, cfg):
     super().__init__()
+    self.cfg = cfg
     self.n_layers = cfg.n_layers
     head_dim = cfg.dim // cfg.n_heads
     if cfg.dim % cfg.n_heads != 0:
@@ -188,55 +185,42 @@ class Transformer(nn.Module):
     if cfg.tie_embeddings:
       self.tie_weights()
 
-  def _prepare_layers(self, cfg):
-    if cfg.token_mixer_pattern is None:
-      if '+' in cfg.token_mixer:
-        token_mixers = cfg.token_mixer.split('+')
-        assert len(token_mixers) == 2, 'Only support two token mixers for now'
-        assert all(tm in SUPPORTED_TOKEN_MIXERS for tm in token_mixers), (
-          f'Unknown token mixer(s) {token_mixers}, supported: {list(SUPPORTED_TOKEN_MIXERS.keys())}'
-        )
-        layers = []
-        for idx in range(cfg.n_layers):
-          if (idx + 1) % (cfg.hybrid_mixer_ratio + 1) == 0:
-            token_mixer_type = token_mixers[-1]
-          else:
-            token_mixer_type = token_mixers[0]
-          layers.append(Block(idx, token_mixer_type, cfg))
+  def verify_arch(self):
+    if '+' not in self.cfg.token_mixer and self.hybrid_mixer_ratio == 1:
+      print(type(self.layers[0].token_mixer).__name__)
+    else:
+      print(type(self.layers[0].token_mixer).__name__)
+      print(type(self.layers[self.hybrid_mixer_ratio].token_mixer).__name__)
 
-      else:
-        layers = []
-        for idx in range(cfg.n_layers):
-          layers.append(Block(idx, cfg.token_mixer, cfg))
+  def _prepare_layers(self, cfg):
+    if '+' in cfg.token_mixer:
+      token_mixers = cfg.token_mixer.split('+')
+      assert len(token_mixers) == 2, 'Only support two token mixers for now'
+      assert all(tm in SUPPORTED_TOKEN_MIXERS for tm in token_mixers), (
+        f'Unknown token mixer(s) {token_mixers}, supported: {list(SUPPORTED_TOKEN_MIXERS.keys())}'
+      )
+      layers = []
+      for idx in range(cfg.n_layers):
+        if (idx + 1) % (cfg.hybrid_mixer_ratio + 1) == 0:
+          token_mixer_type = token_mixers[-1]
+        else:
+          token_mixer_type = token_mixers[0]
+        layers.append(Block(idx, token_mixer_type, cfg))
 
     else:
-      # here's the pattern we like: "(gdn,gdn,gdn,attn)..."
-      # the "..." means repeated enough times till `n_layers` is reached
-      # the number of comma-separated modes in the parenthesis should be perfectly divide `n_layers`
-      block_pattern = cfg.token_mixer_pattern.split('...')[0][1:-1].split(',')
-      assert cfg.n_layers % len(block_pattern) == 0, (
-        'Size of a block in cfg.token_mixer_pattern must perfectly divide cfg.n_layers'
-      )
-      num_repeats = int(cfg.n_layers / len(block_pattern))
-
       layers = []
-      idx = 0
-      for i in range(num_repeats):
-        for token_mixer_type in block_pattern:
-          layers.append(Block(idx, token_mixer_type, cfg))
-          idx += 1
-
-      assert idx == cfg.n_layers, 'Error in creating layers from cfg.token_mixer_pattern'
+      for idx in range(cfg.n_layers):
+        layers.append(Block(idx, cfg.token_mixer, cfg))
 
     return nn.ModuleList(layers)
 
-  def forward(self, x, attention_mask):
+  def forward(self, x, attention_mask, linear_mask=None, cu_seqlens=None):
     # x: (bsz, seqlen)
     x = self.embed_tokens(x)  # (bsz, seqlen, dim)
     self.freqs_cis = self.freqs_cis.to(x.device)
 
     for layer in self.layers:
-      x = layer(x, self.freqs_cis, attention_mask)  # (bsz, seqlen, dim)
+      x = layer(x, self.freqs_cis, attention_mask, linear_mask, cu_seqlens)  # (bsz, seqlen, dim)
 
     return self.lm_head(self.out_norm(x))  # (bsz, seqlen, vocab_size)
 

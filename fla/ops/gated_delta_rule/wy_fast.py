@@ -10,41 +10,16 @@ import triton
 import triton.language as tl
 
 from fla.ops.utils import prepare_chunk_indices
-from fla.ops.utils.op import exp, exp2
-from fla.utils import IS_NVIDIA_BLACKWELL, autotune_cache_kwargs, check_shared_mem
-
-if IS_NVIDIA_BLACKWELL:
-    """
-    Compute tl.dot with SM100 workaround.
-
-    On SM100 (Blackwell) GPUs, wraps the result in inline assembly to prevent
-    the TritonGPUHoistTMEMAlloc pass from incorrectly fusing add and dot operations.
-    See: https://github.com/fla-org/flash-linear-attention/issues/638
-
-    TODO: Remove this workaround once the Triton compiler bug is fixed.
-    Track upstream issue at: https://github.com/triton-lang/triton/issues/8695
-    """
-    @triton.jit
-    def safe_dot(a, b):
-        return tl.inline_asm_elementwise(
-            asm="mov.f32 $0, $1;",
-            constraints="=r,r",
-            args=[tl.dot(a, b)],
-            dtype=tl.float32,
-            is_pure=True,
-            pack=1,
-        )
-else:
-    @triton.jit
-    def safe_dot(a, b):
-        return tl.dot(a, b)
+from fla.ops.utils.cache import fla_cache_autotune
+from fla.ops.utils.op import exp2
+from fla.utils import autotune_cache_kwargs, check_shared_mem
 
 
 @triton.heuristics({
     'USE_G': lambda args: args['g'] is not None,
     'IS_VARLEN': lambda args: args['cu_seqlens'] is not None,
 })
-@triton.autotune(
+@fla_cache_autotune(
     configs=[
         triton.Config({}, num_warps=num_warps, num_stages=num_stages)
         for num_warps in [2, 4, 8]
@@ -73,10 +48,9 @@ def recompute_w_u_fwd_kernel(
     BK: tl.constexpr,
     BV: tl.constexpr,
     USE_G: tl.constexpr,
-    USE_EXP2: tl.constexpr,
     IS_VARLEN: tl.constexpr,
 ):
-    i_t, i_bh = tl.program_id(0), tl.program_id(1)
+    i_t, i_bh = tl.program_id(0), tl.program_id(1).to(tl.int64)
     i_b, i_h = i_bh // HV, i_bh % HV
     if IS_VARLEN:
         i_n, i_t = tl.load(chunk_indices + i_t * 2).to(tl.int32), tl.load(chunk_indices + i_t * 2 + 1).to(tl.int32)
@@ -100,10 +74,7 @@ def recompute_w_u_fwd_kernel(
 
     if USE_G:
         p_g = tl.make_block_ptr(g + (bos*HV + i_h), (T,), (HV,), (i_t * BT,), (BT,), (0,))
-        if USE_EXP2:
-            b_g = exp2(tl.load(p_g, boundary_check=(0,)))
-        else:
-            b_g = exp(tl.load(p_g, boundary_check=(0,)))
+        b_g = exp2(tl.load(p_g, boundary_check=(0,)))
 
     for i_k in range(tl.cdiv(K, BK)):
         p_k = tl.make_block_ptr(k + (bos*H + i_h // (HV // H)) * K, (T, K), (H*K, 1), (i_t * BT, i_k * BK), (BT, BK), (1, 0))
@@ -120,7 +91,7 @@ def recompute_w_u_fwd_kernel(
     'USE_G': lambda args: args['g'] is not None,
     'IS_VARLEN': lambda args: args['cu_seqlens'] is not None,
 })
-@triton.autotune(
+@fla_cache_autotune(
     configs=[
         triton.Config({}, num_warps=num_warps, num_stages=num_stages)
         for num_warps in [2, 4]
@@ -153,10 +124,9 @@ def prepare_wy_repr_bwd_kernel(
     BK: tl.constexpr,
     BV: tl.constexpr,
     USE_G: tl.constexpr,
-    USE_EXP2: tl.constexpr,
     IS_VARLEN: tl.constexpr,
 ):
-    i_t, i_bh = tl.program_id(0), tl.program_id(1)
+    i_t, i_bh = tl.program_id(0), tl.program_id(1).to(tl.int64)
     i_b, i_h = i_bh // HV, i_bh % HV
     if IS_VARLEN:
         i_n, i_t = tl.load(chunk_indices + i_t * 2).to(tl.int32), tl.load(chunk_indices + i_t * 2 + 1).to(tl.int32)
@@ -177,10 +147,7 @@ def prepare_wy_repr_bwd_kernel(
     if USE_G:
         p_g = tl.make_block_ptr(g + (bos*HV + i_h), (T,), (HV,), (i_t * BT,), (BT,), (0,))
         b_g = tl.load(p_g, boundary_check=(0,))
-        if USE_EXP2:
-            b_g_exp = exp2(b_g)
-        else:
-            b_g_exp = tl.exp(b_g)
+        b_g_exp = exp2(b_g)
         b_dg = tl.zeros([BT], dtype=tl.float32)
 
     for i_k in range(tl.cdiv(K, BK)):
@@ -201,6 +168,9 @@ def prepare_wy_repr_bwd_kernel(
             b_dk = b_dkbg * (b_g_exp * b_b)[:, None]
             b_db += tl.sum(b_dkbg * b_k * b_g_exp[:, None], 1)
             b_dg += tl.sum(b_dkbg * b_kbg, 1)
+        else:
+            b_dk = b_dkbg * b_b[:, None]
+            b_db += tl.sum(b_dkbg * b_k, 1)
         tl.store(p_dk, b_dk.to(p_dk.dtype.element_ty), boundary_check=(0, 1))
 
     for i_v in range(tl.cdiv(V, BV)):
@@ -224,10 +194,7 @@ def prepare_wy_repr_bwd_kernel(
     b_dA = tl.dot(b_A, b_dA.to(b_A.dtype))
 
     if USE_G:
-        if USE_EXP2:
-            b_dA *= exp2(b_g[:, None] - b_g[None, :])
-        else:
-            b_dA *= exp(b_g[:, None] - b_g[None, :])
+        b_dA *= exp2(b_g[:, None] - b_g[None, :])
 
     b_A = tl.zeros([BT, BT], dtype=tl.float32)
     b_dA = tl.where(m_A, -b_dA, 0).to(k.dtype.element_ty)
@@ -265,7 +232,6 @@ def recompute_w_u_fwd(
     g: torch.Tensor | None = None,
     cu_seqlens: torch.LongTensor | None = None,
     chunk_indices: torch.LongTensor | None = None,
-    use_exp2: bool = False,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     B, T, H, K, V, HV = *k.shape, v.shape[-1], v.shape[2]
     BT = A.shape[-1]
@@ -296,7 +262,6 @@ def recompute_w_u_fwd(
         BT=BT,
         BK=BK,
         BV=BV,
-        USE_EXP2=use_exp2,
     )
     return w, u
 
@@ -311,7 +276,6 @@ def prepare_wy_repr_bwd(
     g: torch.Tensor = None,
     cu_seqlens: torch.LongTensor | None = None,
     chunk_indices: torch.LongTensor | None = None,
-    use_exp2: bool = False,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     B, T, H, K, V, HV = *k.shape, v.shape[-1], v.shape[2]
     BT = 64
@@ -348,7 +312,6 @@ def prepare_wy_repr_bwd(
         BT=BT,
         BK=BK,
         BV=BV,
-        USE_EXP2=use_exp2,
     )
     if H != HV:
         dk = dk.view(B, T, H, HV // H, K).sum(3)

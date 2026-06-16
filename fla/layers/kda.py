@@ -12,13 +12,12 @@ from typing import TYPE_CHECKING
 
 import torch
 import torch.nn as nn
-from einops import rearrange, repeat
+from einops import rearrange
 from torch.nn import functional as F
 
 from fla.layers.utils import get_layer_cache, get_unpad_data, index_first_axis, pad_input, update_layer_cache
 from fla.modules import FusedRMSNormGated, ShortConvolution
 from fla.ops.kda import chunk_kda, fused_recurrent_kda
-from fla.ops.kda.gate import fused_kda_gate
 
 if TYPE_CHECKING:
     from transformers.processing_utils import Unpack
@@ -164,19 +163,22 @@ class KimiDeltaAttention(nn.Module):
                 activation="silu",
             )
 
+        # Gate dim = HV * K: per value-head, per key-dim gating.
+        self.gate_dim = int(self.num_v_heads * self.head_k_dim)
         self.f_proj = nn.Sequential(
             nn.Linear(hidden_size, self.head_v_dim, bias=False),
-            nn.Linear(self.head_v_dim, self.key_dim, bias=False),
+            nn.Linear(self.head_v_dim, self.gate_dim, bias=False),
         )
-        self.b_proj = nn.Linear(hidden_size, self.num_heads, bias=False)
+        self.b_proj = nn.Linear(hidden_size, self.num_v_heads, bias=False)
 
+        # A_log and dt_bias are per value-head for native GVA support.
         if safe_gate:
-            self.A_log = nn.Parameter(torch.zeros(self.num_heads, dtype=torch.float32))
+            self.A_log = nn.Parameter(torch.zeros(self.num_v_heads, dtype=torch.float32))
         else:
-            self.A_log = nn.Parameter(torch.log(torch.empty(self.num_heads, dtype=torch.float32).uniform_(1, 16)))
+            self.A_log = nn.Parameter(torch.log(torch.empty(self.num_v_heads, dtype=torch.float32).uniform_(1, 16)))
         self.A_log._no_weight_decay = True
         dt = torch.exp(
-            torch.rand(self.key_dim, dtype=torch.float32) * (math.log(0.1) - math.log(0.001)) + math.log(0.001)
+            torch.rand(self.gate_dim, dtype=torch.float32) * (math.log(0.1) - math.log(0.001)) + math.log(0.001)
         ).clamp(min=1e-4)
         inv_dt = dt + torch.log(-torch.expm1(-dt))
         self.dt_bias = nn.Parameter(inv_dt)
@@ -246,18 +248,12 @@ class KimiDeltaAttention(nn.Module):
             v = F.silu(self.v_proj(hidden_states))
 
         g = self.f_proj(hidden_states)
-        beta = self.b_proj(hidden_states).sigmoid()
+        beta = self.b_proj(hidden_states)
 
-        q, k, g = (rearrange(x, "... (h d) -> ... h d", d=self.head_k_dim) for x in (q, k, g))
+        q, k = (rearrange(x, "... (h d) -> ... h d", d=self.head_k_dim) for x in (q, k))
+        # g and v are at value-head dimension (HV); q/k are at qk-head dimension (H).
+        g = rearrange(g, "... (h d) -> ... h d", d=self.head_k_dim)
         v = rearrange(v, "... (h d) -> ... h d", d=self.head_v_dim)
-
-        # for multi-value attention, we repeat the inputs for simplicity.
-        if self.num_v_heads > self.num_heads:
-            q, k, g = (repeat(x, "... h d -> ... (h g) d", g=self.num_v_heads // self.num_heads) for x in (q, k, g))
-            beta = repeat(beta, "... h -> ... (h g)", g=self.num_v_heads // self.num_heads)
-
-        if self.allow_neg_eigval:
-            beta = beta * 2.0
 
         recurrent_state = last_state["recurrent_state"] if last_state is not None else None
         if mode == "chunk":
@@ -273,21 +269,30 @@ class KimiDeltaAttention(nn.Module):
                 output_final_state=use_cache,
                 use_qk_l2norm_in_kernel=True,
                 use_gate_in_kernel=True,
+                use_beta_sigmoid_in_kernel=True,
+                allow_neg_eigval=self.allow_neg_eigval,
                 safe_gate=self.safe_gate,
                 lower_bound=self.lower_bound,
+                state_v_first=True,
                 cu_seqlens=cu_seqlens,
             )
         elif mode == "fused_recurrent":
-            g = fused_kda_gate(g=g, A_log=self.A_log, dt_bias=self.dt_bias, lower_bound=self.lower_bound)
             o, recurrent_state = fused_recurrent_kda(
                 q=q,
                 k=k,
                 v=v,
                 g=g,
                 beta=beta,
+                A_log=self.A_log,
+                dt_bias=self.dt_bias,
                 initial_state=recurrent_state,
                 output_final_state=use_cache,
                 use_qk_l2norm_in_kernel=True,
+                use_gate_in_kernel=True,
+                use_beta_sigmoid_in_kernel=True,
+                allow_neg_eigval=self.allow_neg_eigval,
+                lower_bound=self.lower_bound,
+                state_v_first=True,
                 cu_seqlens=cu_seqlens,
             )
         else:

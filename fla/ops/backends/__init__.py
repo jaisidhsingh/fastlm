@@ -14,24 +14,39 @@ import logging
 import os
 import threading
 from collections.abc import Callable
-from functools import wraps
+from functools import cache, wraps
 from importlib.util import find_spec
 from typing import Any, ClassVar, TypeVar
 
+import torch
+
 logger = logging.getLogger(__name__)
 F = TypeVar('F', bound=Callable)
+
+
+_DISPATCH_DISABLED = os.environ.get("FLA_DISABLE_BACKEND_DISPATCH") == "1"
+if _DISPATCH_DISABLED:
+    logger.info("[FLA Backend] FLA_DISABLE_BACKEND_DISPATCH=1 — all dispatch bypassed")
 
 
 class BaseBackend:
     """Base class for operation-specific backends.
 
     Attributes:
-        backend_type: Identifier for the backend type, used to distinguish different backend implementations.
-        package_name: Name of the external package required by the backend. None indicates no external dependency.
-        env_var: Environment variable name that controls whether the backend is enabled. None means always enabled.
-        default_enable: Controls whether the backend is enabled by default when env_var is not set.
-                       Defaults to True (enabled). Set to False to require explicit user opt-in.
-        priority: Backend priority, lower values indicate higher priority (default is 5).
+        backend_type (str, Optional):
+            Identifier for the backend type, used to distinguish different backend implementations.
+            Default: `"base"`.
+        package_name (str, Optional):
+            Name of the external package required by the backend.
+            `None` indicates no external dependency. Default: `None`.
+        env_var (str, Optional):
+            Environment variable name that controls whether the backend is enabled.
+            `None` means always enabled. Default: `None`.
+        default_enable (bool, Optional):
+            Whether the backend is enabled by default when `env_var` is not set.
+            Set to `False` to require explicit user opt-in. Default: `True`.
+        priority (int, Optional):
+            Backend priority. Lower values indicate higher priority. Default: 5.
     """
 
     backend_type: ClassVar[str] = "base"
@@ -55,6 +70,7 @@ class BaseBackend:
         return os.environ.get(cls.env_var, default_value) != "0"
 
     @classmethod
+    @cache
     def can_use(cls) -> bool:
         return cls.is_available() and cls.is_enabled()
 
@@ -69,6 +85,11 @@ class BaseBackend:
             return verifier(*args, **kwargs)
         except Exception as e:
             return False, str(e)
+
+
+_OPERATION_BACKEND_MODULES: dict[str, str] = {
+    'modules': 'fla.modules.backends',
+}
 
 
 class BackendRegistry:
@@ -125,8 +146,12 @@ class BackendRegistry:
                 return
 
             # Import backend module to trigger registration
+            module_path = _OPERATION_BACKEND_MODULES.get(
+                operation,
+                f'fla.ops.{operation}.backends',
+            )
             with contextlib.suppress(ImportError):
-                __import__(f'fla.ops.{operation}.backends', fromlist=[''])
+                __import__(module_path, fromlist=[''])
 
             cls._initialized.add(operation)
 
@@ -138,6 +163,8 @@ def dispatch(operation: str):
     that passes the verifier for the given function call.
     """
     def decorator(func: F) -> F:
+        if _DISPATCH_DISABLED:
+            return func
         func_name = func.__name__
 
         @wraps(func)
@@ -154,11 +181,19 @@ def dispatch(operation: str):
             backends_list = registry._get_sorted_backends()
 
             for be in backends_list:
-                if not be.can_use():
+                # Avoid be.can_use(): its @cache wrapper breaks torch.compile tracing.
+                if not (be.is_available() and be.is_enabled()):
                     continue
 
-                can_use, _ = be.verify(func_name, *args, **kwargs)
+                can_use, reason = be.verify(func_name, *args, **kwargs)
                 if not can_use:
+                    fail_key = f"{operation}:{func_name}:{be.backend_type}:fail"
+                    if fail_key not in registry._logged:
+                        registry._logged.add(fail_key)
+                        logger.info(
+                            f"[FLA Backend] {operation}.{func_name} -> {be.backend_type} "
+                            f"rejected: {reason}"
+                        )
                     continue
 
                 impl = getattr(be, func_name, None)
@@ -169,15 +204,16 @@ def dispatch(operation: str):
 
                 log_key = f"{operation}:{func_name}:{be.backend_type}"
                 if log_key not in registry._logged:
-                    with registry._lock:
-                        if log_key not in registry._logged:
-                            registry._logged.add(log_key)
-                            logger.info(f"[FLA Backend] {operation}.{func_name} -> {be.backend_type}")
+                    registry._logged.add(log_key)
+                    logger.info(f"[FLA Backend] {operation}.{func_name} -> {be.backend_type}")
 
                 return result
 
             # No backend can handle this call, use default implementation
             return func(*args, **kwargs)
+
+        # Dispatch performs runtime backend selection; keep it out of torch.compile graphs.
+        wrapper = torch.compiler.disable(wrapper)
 
         return wrapper
     return decorator

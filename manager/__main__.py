@@ -8,10 +8,11 @@ import pandas as pd
 import tyro
 import yaml
 
+import src.utils as utils
 from src.constants import DEFAULT_CONFIG, SCALING_LADDER
 
 LR_FLOAT_TO_STR_MAP = {0.00025: '25e-5', 0.0005: '5e-4', 0.001: '1e-3', 0.002: '2e-3', 0.004: '4e-3', 0.008: '8e-3'}
-PARAM_SCALE_ID_TO_MEM_MAP = {'20M': 64, '50M': 72, '150M': 96, '300M': 128}
+PARAM_SCALE_ID_TO_MEM_MAP = {'20M': 32, '50M': 64, '150M': 72, '300M': 96}
 DB_PATH = '/home/jsingh/projects/fastlm/execs/exec_db.csv'
 FOLDER = '/home/jsingh/projects/fastlm/execs'
 
@@ -24,6 +25,7 @@ class ManagerConfig:
   gbs: int = 32
   lr: tp.Union[str, float] = 'all_parallel'
   mode: str = 'main'
+  submit: str = 'yes'
 
 
 def check_subfolders(cfg):
@@ -62,6 +64,9 @@ def get_config_content(arch_id, n, gbs, lr, mode):
   # model specifications first
   base_cfg['arch_id'] = arch_id
   base_cfg['param_scale_id'] = n
+  mixer, ratio = utils.parse_arch_id(arch_id)
+  base_cfg['token_mixer'] = mixer
+  base_cfg['hybrid_mixer_ratio'] = ratio
 
   for k in ['d_model', 'n_layers', 'n_heads']:
     base_cfg[k] = SCALING_LADDER['models'][n][k]
@@ -239,44 +244,45 @@ def main(cfg: ManagerConfig):
   with open(jobfile_path, 'w') as f:
     f.write(jobfile_content)
 
-  # submit this job
-  result = subprocess.run(
-    ['condor_submit_bid', f'{cfg.bid}', jobfile_path],  # command and arguments
-    capture_output=True,  # capture stdout/stderr
-    text=True,  # return strings instead of bytes
-  )
-  if result.returncode == 0:
-    print(result.stdout)
-    cluster_id = result.stdout.split(' cluster ')[-1][:-2]
-    cluster_id = int(cluster_id)
+  if cfg.submit == 'yes':
+    # submit this job
+    result = subprocess.run(
+      ['condor_submit_bid', f'{cfg.bid}', jobfile_path],  # command and arguments
+      capture_output=True,  # capture stdout/stderr
+      text=True,  # return strings instead of bytes
+    )
+    if result.returncode == 0:
+      print(result.stdout)
+      cluster_id = result.stdout.split(' cluster ')[-1][:-2]
+      cluster_id = int(cluster_id)
 
-    # update our file that contains info about what we ran
-    info = {
-      'arch_id': cfg.arch_id,
-      'n': cfg.n,
-      'gbs': cfg.gbs,
-      'lr': 'all_parallel' if isinstance(lr, list) else lr,
-      'dp': get_dp_value(cfg.n, cfg.gbs),
-      'main': 'yes' if cfg.mode == 'main' else 'no',
-      'decay': 'yes' if cfg.mode == 'decay' else 'no',
-      'cfg': 'yes',
-      'sub': 'yes',
-      'cluster_id': cluster_id,
-      'n_jobs': n_jobs,
-    }
-    new_row = pd.DataFrame([info])
+      # update our file that contains info about what we ran
+      info = {
+        'arch_id': cfg.arch_id,
+        'n': cfg.n,
+        'gbs': cfg.gbs,
+        'lr': 'all_parallel' if isinstance(lr, list) else lr,
+        'dp': get_dp_value(cfg.n, cfg.gbs),
+        'main': 'yes' if cfg.mode == 'main' else 'no',
+        'decay': 'yes' if cfg.mode == 'decay' else 'no',
+        'cfg': 'yes',
+        'sub': 'yes',
+        'cluster_id': cluster_id,
+        'n_jobs': n_jobs,
+      }
+      new_row = pd.DataFrame([info])
 
-    try:
-      df = pd.read_csv(DB_PATH)
-    except (FileNotFoundError, pd.errors.EmptyDataError):
-      df = pd.DataFrame()
+      try:
+        df = pd.read_csv(DB_PATH)
+      except (FileNotFoundError, pd.errors.EmptyDataError):
+        df = pd.DataFrame()
 
-    df = pd.concat([df, new_row], ignore_index=True)
-    df.to_csv(DB_PATH, index=False)
+      df = pd.concat([df, new_row], ignore_index=True)
+      df.to_csv(DB_PATH, index=False)
 
-  else:
-    print('Something bad happened when we submit the job using subprocess! Printing the subprocess call error:')
-    print(result.stderr)
+    else:
+      print('Something bad happened when we submit the job using subprocess! Printing the subprocess call error:')
+      print(result.stderr)
 
 
 if __name__ == '__main__':

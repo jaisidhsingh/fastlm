@@ -29,6 +29,7 @@ def construct_model(cfg):
       gdn_conv_size=cfg.gdn_conv_size,
       gdn_gate=cfg.gdn_gate,
       gdn_neg_eigval=cfg.gdn_neg_eigval,
+      intra_doc=cfg.intra_doc_masking,
     )
     model = Transformer(model_cfg)
 

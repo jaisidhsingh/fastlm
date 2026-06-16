@@ -32,6 +32,6 @@ export TRITON_CACHE_DIR=/fast/jsingh/tmp/triton/${job_cluster}/${job_idx}
 export TORCHINDUCTOR_CACHE_DIR=/fast/jsingh/tmp/inductor/${job_cluster}/${job_idx}
 
 # Make `torch.compile` happy for GDN implementation
-export TORCHDYNAMO_CAPTURE_SCALAR_OUTPUTS=1
+# export TORCHDYNAMO_CAPTURE_SCALAR_OUTPUTS=1
 # Execute python script
 python -m experiments.train --config=$config --job_idx=$job_idx --job_cluster=$job_cluster

@@ -196,7 +196,7 @@ class GatedLinearAttention(nn.Module):
         last_state = get_layer_cache(self, past_key_values)
 
         cu_seqlens = kwargs.get('cu_seqlens')
-        if attention_mask is not None:
+        if cu_seqlens is None and attention_mask is not None:
             indices, cu_seqlens, _ = get_unpad_data(attention_mask[:, -q_len:])
             hidden_states = index_first_axis(rearrange(hidden_states, "b s ... -> (b s) ..."), indices).unsqueeze(0)
 
@@ -252,6 +252,7 @@ class GatedLinearAttention(nn.Module):
                 gk=gk,
                 initial_state=recurrent_state,
                 output_final_state=use_cache,
+                state_v_first=True,
                 cu_seqlens=cu_seqlens,
             )
         elif mode == 'fused_chunk':
@@ -271,6 +272,7 @@ class GatedLinearAttention(nn.Module):
                 g=gk,
                 initial_state=recurrent_state,
                 output_final_state=use_cache,
+                state_v_first=True,
                 cu_seqlens=cu_seqlens,
             )
         else:
