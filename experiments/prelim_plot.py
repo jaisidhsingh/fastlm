@@ -13,8 +13,6 @@ from src.constants import SCALING_LADDER, SCALING_RESULTS_FOLDER
 from src.metric_tensor import ScalingMetricTensor
 from src.plotting.learning_rate import loss_vs_lr_heat_d, loss_vs_lr_heat_n
 
-sns.set_palette(sns.color_palette('rocket'))
-
 SQL = SCALING_LADDER['seq_len']
 PARAM_SCALES = [k for k in SCALING_LADDER['models'].keys()]
 TOKEN_BUDGETS = [k for k in SCALING_LADDER['batch_size_vs_token_budget_strategy']['staggered_grid'].keys()]
@@ -33,12 +31,19 @@ COORDS = {
   'lr': H,
 }
 
-CMAPS = {
-  '20M': sns.cubehelix_palette(start=0.5, rot=-0.5, as_cmap=False, reverse=False),
-  '50M': sns.cubehelix_palette(start=0.5, rot=-0.75, as_cmap=False, reverse=False),
-  '150M': sns.color_palette('ch:s=-.2,r=.6', as_cmap=False),
-  '300M': sns.color_palette('rocket_r', as_cmap=False),
+BASE_COLORS = {
+  '20M': '#2166ac',  # blue
+  '50M': '#762a83',  # wine/purple
+  '150M': '#d73027',  # red
+  '300M': '#FFA500',  # orange
 }
+
+LIGHTNESS = {'0.5B': 0.0, '1.0B': 0.35, '3.0B': 0.6}
+
+
+def lighten(color, amount):
+  c = np.array(to_rgb(color))
+  return tuple(c + (1 - c) * amount)
 
 
 def load_data(ns, ds, gbss, lrs, arch_id):
@@ -57,12 +62,13 @@ def load_data(ns, ds, gbss, lrs, arch_id):
     ref_d = SCALING_LADDER['batch_size_vs_token_budget_strategy']['staggered_runs'][gbs]
     if float(d[:-1]) <= float(ref_d[:-1]):
       if not os.path.exists(os.path.join(folder, fname)):
-        print(n, d, gbs, lr)
+        # print(n, d, gbs, lr)
+        return 0.0
 
       if os.path.exists(os.path.join(folder, fname)):
         with open(os.path.join(folder, fname)) as f:
           da = json.load(f)
-        return min(da['valid/loss'])
+        return da['valid/loss'][-1]
 
   data = np.ones((len(ns), len(ds), len(gbss), len(lrs))) * 1e6
   tensor = ScalingMetricTensor(data, COORDS)
@@ -77,55 +83,68 @@ def load_data(ns, ds, gbss, lrs, arch_id):
   return tensor
 
 
-# with open('/home/jsingh/projects/fastlm/execs/mts/attn_j17.pkl', 'wb') as f:
-# pickle.dump(t, f)
+def main(arch_id):
+  t = load_data(ns=P, ds=Q, gbss=B, lrs=H, arch_id=arch_id)
+  with open(f'/home/jsingh/projects/fastlm/execs/mts/{arch_id}_j17.pkl', 'wb') as f:
+    pickle.dump(t, f)
 
-# %%
+  fig, ax = plt.subplots(
+    len(B[:]),
+    len(P),
+    figsize=(24, 10),  # scale this up — width per column ~5-6in, height per row ~5in
+    sharey=False,
+  )
 
-BASE_COLORS = {
-  '20M': '#2166ac',  # blue
-  '50M': '#762a83',  # wine/purple
-  '150M': '#d73027',  # red
-  '300M': '#FFA500',  # orange
-}
+  for ii, gbs in enumerate(B[:]):
+    for jj, n in enumerate(P):
+      for d in Q:
+        color = lighten(BASE_COLORS[n], LIGHTNESS[d])
+        y = t.at(n=n, d=d, gbs=gbs)
 
+        if y._hdata.sum() > 0:
+          yy = y._hdata[y._hdata > 0]
+          lrx = np.array(t.stored_coords['lr'])[y._hdata > 0]
+          ax[ii, jj].scatter(lrx, yy, label=f'{n} - {d}', color=color, marker='o')
 
-def lighten(color, amount):
-  c = np.array(to_rgb(color))
-  return tuple(c + (1 - c) * amount)
+          X = np.log2(lrx)
+          A = np.vstack([X**2, X, np.ones_like(X)]).T
+          a, b, c = np.linalg.lstsq(A, yy, rcond=None)[0]
+          x_fit = np.linspace(0.75 * (2 ** (-12)), 0.75 * (2 ** (-6)), 200)
+          logx = np.log2(x_fit)
+          y_fit = a * logx**2 + b * logx + c
+          ax[ii, jj].plot(x_fit, y_fit, color=color)
 
+          best_idx = np.argmin(y_fit)
+          best_lr = x_fit[best_idx]
+          best_loss = y_fit[best_idx]
 
-LIGHTNESS = {'0.5B': 0.0, '1.0B': 0.4, '3.0B': 0.8}
+          ax[ii, jj].scatter(
+            best_lr,
+            best_loss,
+            zorder=10,
+            color=color,
+            marker='*',
+            s=200,
+            # edgecolor='black',
+          )
 
-arch_id = 'gdn'
-t = load_data(ns=P, ds=Q, gbss=B, lrs=H, arch_id=arch_id)
+      ax[ii, jj].set_xlim([0.75 * 2 ** (-13), 0.75 * 2 ** (-6)])
+      ax[ii, jj].set_ylim([3.0, 4.4])
+      ax[ii, jj].set_xscale('log', base=2)
+      ax[ii, jj].set_xlabel(r'$\eta$')
+      ax[ii, jj].set_ylabel(r'$\mathcal{L}_{\text{valid}}$')
 
-for gbs in B:
-  for n in P:
-    for d in Q:
-      color = lighten(BASE_COLORS[n], LIGHTNESS[d])
-      y = t.at(n=n, d=d, gbs=gbs)
-      if y._hdata.sum() > 0 and not (gbs == 32 and d == '0.5B'):
-        best_idx = np.argmin(y._hdata)
-        best_lr = t.stored_coords['lr'][best_idx]
-        best_loss = y._hdata[best_idx]
+      ax[ii, jj].set_title(f'GBS={gbs}')
+      ax[ii, jj].grid(True)
+      ax[ii, jj].legend(loc='upper right')
 
-        plt.plot(t.stored_coords['lr'], y, label=f'{n} - {d}', color=color)
-        plt.scatter(best_lr, best_loss, s=40, zorder=10, color=color, marker='*')
-      else:
-        print(n, d, gbs)
-
-  plt.xlim([2 ** (-13), 2 ** (-6)])
-  plt.xscale('log', base=2)
-  plt.xlabel(r'$\eta$')
-  plt.ylabel(r'$\mathcal{L}_{\text{valid}}$')
-
-  plt.title(f'{arch_id.upper()}, GBS={gbs}')
-  plt.grid(True)
-  plt.legend(bbox_to_anchor=(1.02, 1), loc='upper left', borderaxespad=0.0)
-  plt.tight_layout()
-  plt.savefig(f'{arch_id}_{gbs}.png', dpi=300, bbox_inches='tight')
+  plt.suptitle(f'ARCH={arch_id}')
+  plt.savefig(f'plots/{arch_id}.png', dpi=300, bbox_inches='tight')
   plt.cla()
   plt.clf()
 
-# %%
+
+if __name__ == '__main__':
+  sns.set_style('whitegrid')
+  main('attn')
+  main('gdn')
