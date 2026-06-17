@@ -269,9 +269,86 @@ def plot_n_d_laws(arch_id):
   plt.clf()
 
 
+def find_opt_lr_law(arch_id):
+  # restrict to 150M
+  gbs = 32
+  print(f'ARCH={arch_id}, GBS={gbs}')
+  t = load_data(ns=P, ds=Q, gbss=B, lrs=H, arch_id=arch_id)
+  t = t.at(n=P[:3], gbs=gbs)
+  _d = []
+
+  for jj, n in enumerate(P[:3]):
+    for d in Q:
+      y = t.at(n=n, d=d)
+
+      if y._hdata.sum() > 0:
+        yy = y._hdata[y._hdata > 0]
+        lrx = np.array(t.stored_coords['lr'])[y._hdata > 0]
+
+        X = np.log2(lrx)
+        A = np.vstack([X**2, X, np.ones_like(X)]).T
+        a, b, c = np.linalg.lstsq(A, yy, rcond=None)[0]
+        x_fit = np.linspace(0.75 * (2 ** (-12)), 0.75 * (2 ** (-6)), 200)
+        logx = np.log2(x_fit)
+        y_fit = a * logx**2 + b * logx + c
+
+        best_idx = np.argmin(y_fit)
+        best_lr = x_fit[best_idx]
+        best_loss = y_fit[best_idx]
+        _d.append([best_lr, float(n[:-1]) * 1e6, float(d[:-1]) * 1e9])
+
+  _d = np.array(_d).astype(np.float32)
+  _lr = np.array([dd[0] for dd in _d])
+  _N = np.array([dd[1] for dd in _d])
+  _D = np.array([dd[2] for dd in _d])
+
+  X = np.column_stack([np.log(_N), np.log(_D), np.ones_like(_N)])
+  y = np.log(_lr)
+
+  coeffs, residuals, rank, sv = np.linalg.lstsq(X, y, rcond=None)
+  a, b, c = coeffs
+
+  print(f'a = {a:.4f}, b = {b:.4f}, c = {c:.4f}')
+
+  log_lr_pred = X @ coeffs
+  lr_pred = np.exp(log_lr_pred)
+
+  ss_res = np.sum((y - log_lr_pred) ** 2)
+  ss_tot = np.sum((y - y.mean()) ** 2)
+  r2 = 1 - ss_res / ss_tot
+  print(f'R^2 = {r2:.4f}')
+
+  labels = ['a', 'b', 'c', r'$R^2$']
+  values = [a, b, c, r2]
+  values = [round(float(xv), 3) for xv in values]
+  a = round(float(a), 3)
+  b = round(float(b), 3)
+  c = round(float(c), 3)
+  r2 = round(float(r2), 3)
+
+  plt.bar(
+    labels,
+    values,
+    color=['#4C72B0', '#9B59B6', '#E74C3C', '#F39C12'],
+    label=rf'{round(a, 3)} * $\log N +$ {round(b, 3)} * $\log D + $ {round(c, 3)}',
+  )
+  for l, v in zip(labels, values):
+    plt.annotate(str(round(v, 3)), (l, v + 0.67 * v))
+
+  plt.title(f'ARCH={arch_id}, GBS={gbs}')
+  plt.legend()
+  plt.savefig(f'./plots/{arch_id}_3.png', dpi=300, bbox_inches='tight')
+  plt.cla()
+  plt.clf()
+
+  def predict_lr(N_new, D_new):
+    return np.exp(a * np.log(N_new) + b * np.log(D_new) + c)
+
+
 def main(arch_id):
   # plot_lr_sweep(arch_id)
-  plot_n_d_laws(arch_id)
+  # plot_n_d_laws(arch_id)
+  find_opt_lr_law(arch_id)
 
 
 if __name__ == '__main__':
