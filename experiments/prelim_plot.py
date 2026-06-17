@@ -83,7 +83,7 @@ def load_data(ns, ds, gbss, lrs, arch_id):
   return tensor
 
 
-def main(arch_id):
+def plot_lr_sweep(arch_id):
   t = load_data(ns=P, ds=Q, gbss=B, lrs=H, arch_id=arch_id)
   with open(f'/home/jsingh/projects/fastlm/execs/mts/{arch_id}_j17.pkl', 'wb') as f:
     pickle.dump(t, f)
@@ -104,7 +104,7 @@ def main(arch_id):
         if y._hdata.sum() > 0:
           yy = y._hdata[y._hdata > 0]
           lrx = np.array(t.stored_coords['lr'])[y._hdata > 0]
-          ax[ii, jj].scatter(lrx, yy, label=f'{n} - {d}', color=color, marker='o')
+          ax[ii, jj].scatter(lrx, yy, label=f'N={n}, D={d}', color=color, marker='o')
 
           X = np.log2(lrx)
           A = np.vstack([X**2, X, np.ones_like(X)]).T
@@ -142,6 +142,136 @@ def main(arch_id):
   plt.savefig(f'plots/{arch_id}.png', dpi=300, bbox_inches='tight')
   plt.cla()
   plt.clf()
+
+
+def plot_n_d_laws(arch_id):
+  t = load_data(ns=P, ds=Q, gbss=B, lrs=H, arch_id=arch_id)
+
+  fig, ax = plt.subplots(
+    1,
+    2,
+    figsize=(10, 6),  # scale this up — width per column ~5-6in, height per row ~5in
+    sharey=False,
+  )
+  n, gbs = '150M', 32
+
+  d_lrs = []
+  d_lvs = []
+
+  for d in Q:
+    color = lighten(BASE_COLORS[n], LIGHTNESS[d])
+    y = t.at(n=n, d=d, gbs=gbs)
+
+    if y._hdata.sum() > 0:
+      yy = y._hdata[y._hdata > 0]
+      lrx = np.array(t.stored_coords['lr'])[y._hdata > 0]
+      ax[0].scatter(lrx, yy, color=color, marker='o', label=d)
+
+      X = np.log2(lrx)
+      A = np.vstack([X**2, X, np.ones_like(X)]).T
+      a, b, c = np.linalg.lstsq(A, yy, rcond=None)[0]
+      x_fit = np.linspace(0.75 * (2 ** (-12)), 0.75 * (2 ** (-6)), 200)
+      logx = np.log2(x_fit)
+      y_fit = a * logx**2 + b * logx + c
+
+      ax[0].plot(x_fit, y_fit, color=color)
+
+      best_idx = np.argmin(y_fit)
+      best_lr = x_fit[best_idx]
+      best_loss = y_fit[best_idx]
+      ax[0].scatter(
+        best_lr,
+        best_loss,
+        zorder=10,
+        color=color,
+        marker='*',
+        s=200,
+        # edgecolor='black',
+      )
+
+      d_lrs.append(best_lr)
+      d_lvs.append(best_loss)
+
+  X = np.log2(d_lrs)
+  A = np.vstack([X, np.ones_like(X)]).T
+  a, b = np.linalg.lstsq(A, d_lvs, rcond=None)[0]
+  x_fit = np.linspace(0.75 * (2 ** (-12)), 0.75 * (2 ** (-6)), 200)
+  logx = np.log2(x_fit)
+  y_fit = a * logx + b
+
+  ax[0].plot(x_fit, y_fit, linestyle='--', color='black', label=rf'{round(a, 3)} * $\log x + $ {round(b, 3)}')
+  ax[0].set_title(f'N={n}, GBS={gbs}')
+  ax[0].set_xscale('log', base=2)
+  ax[0].set_xlim([0.75 * 2 ** (-13), 0.75 * 2 ** (-6)])
+  ax[0].set_ylim([3.0, 4.4])
+  ax[0].set_xlabel(r'$\eta$')
+  ax[0].set_ylabel(r'$\mathcal{L}_{\text{valid}}$')
+  ax[0].legend(loc='upper left', fontsize=11)
+
+  d = '3.0B'
+  n_lrs = []
+  n_lvs = []
+  ns = P[:3]
+  for n in ns:
+    color = BASE_COLORS[n]
+    color = np.array(to_rgb(color))
+    y = t.at(n=n, d=d, gbs=gbs)
+
+    if y._hdata.sum() > 0:
+      yy = y._hdata[y._hdata > 0]
+      lrx = np.array(t.stored_coords['lr'])[y._hdata > 0]
+      ax[1].scatter(lrx, yy, label=f'{n}', color=color, marker='o')
+
+      X = np.log2(lrx)
+      A = np.vstack([X**2, X, np.ones_like(X)]).T
+      a, b, c = np.linalg.lstsq(A, yy, rcond=None)[0]
+      x_fit = np.linspace(0.75 * (2 ** (-12)), 0.75 * (2 ** (-6)), 200)
+      logx = np.log2(x_fit)
+      y_fit = a * logx**2 + b * logx + c
+
+      ax[1].plot(x_fit, y_fit, color=color)
+
+      best_idx = np.argmin(y_fit)
+      best_lr = x_fit[best_idx]
+      best_loss = y_fit[best_idx]
+      ax[1].scatter(
+        best_lr,
+        best_loss,
+        zorder=10,
+        color=color,
+        marker='*',
+        s=200,
+        # edgecolor='black',
+      )
+
+      n_lrs.append(best_lr)
+      n_lvs.append(best_loss)
+
+  X = np.log2(n_lrs)
+  A = np.vstack([X, np.ones_like(X)]).T
+  a, b = np.linalg.lstsq(A, n_lvs, rcond=None)[0]
+  x_fit = np.linspace(0.75 * (2 ** (-12)), 0.75 * (2 ** (-6)), 200)
+  logx = np.log2(x_fit)
+  y_fit = a * logx + b
+
+  ax[1].plot(x_fit, y_fit, linestyle='--', color='black', label=rf'{round(a, 3)} * $\log x + $ {round(b, 3)}')
+  ax[1].set_title(f'D={d}, GBS={gbs}')
+  ax[1].set_xscale('log', base=2)
+  ax[1].set_xlim([0.75 * 2 ** (-13), 0.75 * 2 ** (-6)])
+  ax[1].set_ylim([3.0, 4.4])
+  ax[1].set_xlabel(r'$\eta$')
+  ax[1].set_ylabel(r'$\mathcal{L}_{\text{valid}}$')
+  ax[1].legend(loc='upper left', fontsize=11)
+
+  plt.suptitle(f'ARCH={arch_id}')
+  plt.savefig(f'plots/{arch_id}_2.png', dpi=300, bbox_inches='tight')
+  plt.cla()
+  plt.clf()
+
+
+def main(arch_id):
+  # plot_lr_sweep(arch_id)
+  plot_n_d_laws(arch_id)
 
 
 if __name__ == '__main__':
