@@ -17,7 +17,8 @@
 # nvidia-smi
 
 # Job specific vars
-config='/lustre/home/jsingh/projects/fastlm/execs/gdn/50M/cfg-main_gbs-32_lr-all_parallel.yaml'
+config='/lustre/home/jsingh/projects/fastlm/june_exec/decay_intermediates/cfg-decay_gbs-32_lr-0p002_n-300M.yaml'
+
 
 # Make `torch.compile` happy for GDN implementation
 # export TORCHDYNAMO_CAPTURE_SCALAR_OUTPUTS=0

@@ -34,6 +34,7 @@ class ScalingMetricTensor:
     dims = tuple(coords.keys())
     expected_shape = tuple(len(coords[d]) for d in dims)
     data = np.asarray(data)
+    self._hdata = data
 
     if data.shape != expected_shape:
       raise ValueError(f'Shape mismatch.\nExpected {expected_shape}\nGot      {data.shape}')
@@ -131,6 +132,9 @@ class ScalingMetricTensor:
 
   def argmax(self, axis):
     return self._wrap(self._da.argmax(dim=axis))
+
+  def sum(self, axis):
+    return self._wrap(self._da.sum(dim=axis))
 
   def argmin_full(self):
     flat_idx = np.nanargmin(self._da.values)
