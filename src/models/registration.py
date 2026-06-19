@@ -3,11 +3,11 @@ from transformers import AutoConfig, AutoModelForCausalLM
 from src.models.to_hf import HybridTransformerConfig, HybridTransformerForCausalLM
 
 AutoConfig.register(
-  'hybrid_transformer',
-  HybridTransformerConfig,
+  'fastlm_hf',
+  HFModelConfig,
 )
 
 AutoModelForCausalLM.register(
-  HybridTransformerConfig,
-  HybridTransformerForCausalLM,
+  HFModelConfig,
+  HFModelForCausalLM,
 )

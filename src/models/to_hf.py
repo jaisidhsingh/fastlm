@@ -10,7 +10,7 @@ from src.data.data_prep_utils import cu_seqlens_from_dense_attention_mask
 from src.models.transformer import ModelConfig, Transformer
 
 
-class HybridTransformerConfig(PretrainedConfig):
+class HFModelConfig(PretrainedConfig):
   model_type = 'hybrid_transformer'
 
   def __init__(
@@ -64,7 +64,7 @@ class HybridTransformerConfig(PretrainedConfig):
     self.intra_doc = intra_doc
 
 
-def hf_to_internal_config(cfg: HybridTransformerConfig):
+def hf_to_internal_config(cfg: HFModelConfig):
   return ModelConfig(
     vocab_size=cfg.vocab_size,
     seq_len=cfg.seq_len,
@@ -88,7 +88,7 @@ def hf_to_internal_config(cfg: HybridTransformerConfig):
   )
 
 
-class HybridTransformerForCausalLM(PreTrainedModel):
+class HFModelForCausalLM(PreTrainedModel):
   config_class = HybridTransformerConfig
   base_model_prefix = 'model'
 
@@ -167,3 +167,20 @@ class HybridTransformerForCausalLM(PreTrainedModel):
       'linear_mask': linear_mask,
       'cu_seqlens': cu_seqlens,
     }
+
+
+def load_checkpoint_into_hf(hf_model, ckpt_path):
+  state = torch.load(ckpt_path, map_location='cpu')
+
+  if 'state_dict' in state:
+    state = state['state_dict']
+
+  missing, unexpected = hf_model.model.load_state_dict(
+    state,
+    strict=True,
+  )
+
+  print('missing:', missing)
+  print('unexpected:', unexpected)
+
+  return hf_model

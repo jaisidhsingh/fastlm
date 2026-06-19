@@ -2,6 +2,41 @@ from fractions import Fraction
 
 import wandb
 
+from src.models.to_hf import HFModelConfig
+
+
+def construct_model_config(cfg):
+  if cfg.model == 'transformer':
+    from .transformer import ModelConfig, Transformer
+
+    model_cfg = ModelConfig(
+      vocab_size=cfg.vocab_size,
+      dim=cfg.d_model,
+      expand=float(Fraction(cfg.expand)),
+      n_layers=cfg.n_layers,
+      n_heads=cfg.n_heads,
+      rmsnorm_eps=1e-6,
+      mlp=cfg.mlp_class,
+      seq_len=cfg.seq_len,
+      tie_embeddings=cfg.tie_embeddings,
+      token_mixer=cfg.token_mixer,
+      hybrid_mixer_ratio=cfg.hybrid_mixer_ratio,
+      layer_norm_scaling=cfg.layer_norm_scaling,
+      residual_connection=cfg.residual_connection,
+      attn_gate=cfg.attn_gate,
+      attn_qk_norm=cfg.attn_qk_norm,
+      gdn_conv_size=cfg.gdn_conv_size,
+      gdn_gate=cfg.gdn_gate,
+      gdn_neg_eigval=cfg.gdn_neg_eigval,
+      intra_doc=cfg.intra_doc_masking,
+    )
+    return model_cfg
+
+
+def construct_hf_config(cfg):
+  model_cfg = construct_model_config(cfg)
+  return HFModelConfig(**vars(model_cfg))
+
 
 def construct_model(cfg):
   """Initalize a model from config. Counts parameters."""
