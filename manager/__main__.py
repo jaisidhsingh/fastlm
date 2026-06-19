@@ -26,6 +26,7 @@ class ManagerConfig:
   lr: tp.Union[str, float] = 'all_parallel'
   mode: str = 'main'
   submit: str = 'yes'
+  routine: str = 'train'
 
 
 def check_subfolders(cfg):
@@ -210,7 +211,7 @@ def sanity_check():
           )
 
 
-def main(cfg: ManagerConfig):
+def train_management(cfg: ManagerConfig):
   check_subfolders(cfg)
 
   lr = None
@@ -283,6 +284,21 @@ def main(cfg: ManagerConfig):
     else:
       print('Something bad happened when we submit the job using subprocess! Printing the subprocess call error:')
       print(result.stderr)
+
+
+def eval_management(cfg):
+  pass
+
+
+def main(cfg):
+  if cfg.routine == 'train':
+    train_management(cfg)
+  elif cfg.routine == 'eval':
+    eval_management(cfg)
+  else:
+    raise NotImplementedError(
+      'Supported values for `cfg.routine` are `[train, eval]`. You provided an unsupported value.'
+    )
 
 
 if __name__ == '__main__':
