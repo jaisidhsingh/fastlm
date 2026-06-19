@@ -1,0 +1,163 @@
+from transformers import PretrainedConfig
+
+
+class HybridTransformerConfig(PretrainedConfig):
+  model_type = 'hybrid_transformer'
+
+  def __init__(
+    self,
+    vocab_size=32000,
+    seq_len=2048,
+    dim=768,
+    expand=4.0,
+    n_layers=12,
+    n_heads=12,
+    mlp='mlp',
+    rmsnorm_eps=1e-6,
+    tie_embeddings=False,
+    token_mixer='gdn+attn',
+    hybrid_mixer_ratio=3,
+    layer_norm_scaling=False,
+    residual_connection='add',
+    attn_gate=True,
+    attn_qk_norm=True,
+    gdn_conv_size=4,
+    gdn_gate=True,
+    gdn_neg_eigval=True,
+    intra_doc=False,
+    **kwargs,
+  ):
+    super().__init__(**kwargs)
+
+    self.vocab_size = vocab_size
+    self.seq_len = seq_len
+    self.dim = dim
+    self.expand = expand
+    self.n_layers = n_layers
+    self.n_heads = n_heads
+
+    self.mlp = mlp
+    self.rmsnorm_eps = rmsnorm_eps
+    self.tie_embeddings = tie_embeddings
+
+    self.token_mixer = token_mixer
+    self.hybrid_mixer_ratio = hybrid_mixer_ratio
+    self.layer_norm_scaling = layer_norm_scaling
+    self.residual_connection = residual_connection
+
+    self.attn_gate = attn_gate
+    self.attn_qk_norm = attn_qk_norm
+
+    self.gdn_conv_size = gdn_conv_size
+    self.gdn_gate = gdn_gate
+    self.gdn_neg_eigval = gdn_neg_eigval
+
+    self.intra_doc = intra_doc
+
+
+import torch
+import torch.nn.functional as F
+
+# import your original code
+from transformer import ModelConfig, Transformer
+from transformers import (
+  PreTrainedModel,
+)
+from transformers.modeling_outputs import (
+  CausalLMOutputWithPast,
+)
+
+from .config import HybridTransformerConfig
+
+
+def hf_to_internal_config(cfg: HybridTransformerConfig):
+  return ModelConfig(
+    vocab_size=cfg.vocab_size,
+    seq_len=cfg.seq_len,
+    dim=cfg.dim,
+    expand=cfg.expand,
+    n_layers=cfg.n_layers,
+    n_heads=cfg.n_heads,
+    mlp=cfg.mlp,
+    rmsnorm_eps=cfg.rmsnorm_eps,
+    tie_embeddings=cfg.tie_embeddings,
+    token_mixer=cfg.token_mixer,
+    hybrid_mixer_ratio=cfg.hybrid_mixer_ratio,
+    layer_norm_scaling=cfg.layer_norm_scaling,
+    residual_connection=cfg.residual_connection,
+    attn_gate=cfg.attn_gate,
+    attn_qk_norm=cfg.attn_qk_norm,
+    gdn_conv_size=cfg.gdn_conv_size,
+    gdn_gate=cfg.gdn_gate,
+    gdn_neg_eigval=cfg.gdn_neg_eigval,
+    intra_doc=cfg.intra_doc,
+  )
+
+
+class HybridTransformerForCausalLM(PreTrainedModel):
+  config_class = HybridTransformerConfig
+  base_model_prefix = 'model'
+
+  supports_gradient_checkpointing = False
+
+  def __init__(self, config):
+    super().__init__(config)
+
+    self.model = Transformer(hf_to_internal_config(config))
+
+    self.post_init()
+
+  def get_input_embeddings(self):
+    return self.model.embed_tokens
+
+  def set_input_embeddings(self, value):
+    self.model.embed_tokens = value
+
+  def get_output_embeddings(self):
+    return self.model.lm_head
+
+  def set_output_embeddings(self, value):
+    self.model.lm_head = value
+
+  def forward(
+    self,
+    input_ids=None,
+    attention_mask=None,
+    labels=None,
+    linear_mask=None,
+    cu_seqlens=None,
+    **kwargs,
+  ):
+    logits = self.model(
+      x=input_ids,
+      attention_mask=attention_mask,
+      linear_mask=linear_mask,
+      cu_seqlens=cu_seqlens,
+    )
+
+    loss = None
+
+    if labels is not None:
+      shift_logits = logits[..., :-1, :].contiguous()
+      shift_labels = labels[..., 1:].contiguous()
+
+      loss = F.cross_entropy(
+        shift_logits.view(-1, shift_logits.size(-1)),
+        shift_labels.view(-1),
+      )
+
+    return CausalLMOutputWithPast(
+      loss=loss,
+      logits=logits,
+    )
+
+  def prepare_inputs_for_generation(
+    self,
+    input_ids,
+    attention_mask=None,
+    **kwargs,
+  ):
+    return {
+      'input_ids': input_ids,
+      'attention_mask': attention_mask,
+    }

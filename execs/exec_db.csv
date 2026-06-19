@@ -28,3 +28,5 @@ gdn,50M,16,all_parallel,1,no,yes,yes,yes,17353116,6
 gdn,50M,32,all_parallel,1,no,yes,yes,yes,17353117,12
 gdn,150M,16,all_parallel,1,no,yes,yes,yes,17353118,6
 gdn,150M,32,all_parallel,1,no,yes,yes,yes,17353119,12
+gdn,300M,16,all_parallel,1,yes,no,yes,yes,17358796,6
+gdn,300M,32,all_parallel,1,yes,no,yes,yes,17358797,6
