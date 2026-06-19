@@ -1,4 +1,13 @@
-from transformers import PretrainedConfig
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from transformers import PretrainedConfig, PreTrainedModel
+from transformers.modeling_outputs import (
+  CausalLMOutputWithPast,
+)
+
+from src.data.data_prep_utils import cu_seqlens_from_dense_attention_mask
+from src.models.transformer import ModelConfig, Transformer
 
 
 class HybridTransformerConfig(PretrainedConfig):
@@ -6,13 +15,13 @@ class HybridTransformerConfig(PretrainedConfig):
 
   def __init__(
     self,
-    vocab_size=32000,
+    vocab_size=50304,
     seq_len=2048,
     dim=768,
-    expand=4.0,
+    expand=3.0,
     n_layers=12,
-    n_heads=12,
-    mlp='mlp',
+    n_heads=8,
+    mlp='glu',
     rmsnorm_eps=1e-6,
     tie_embeddings=False,
     token_mixer='gdn+attn',
@@ -53,21 +62,6 @@ class HybridTransformerConfig(PretrainedConfig):
     self.gdn_neg_eigval = gdn_neg_eigval
 
     self.intra_doc = intra_doc
-
-
-import torch
-import torch.nn.functional as F
-
-# import your original code
-from transformer import ModelConfig, Transformer
-from transformers import (
-  PreTrainedModel,
-)
-from transformers.modeling_outputs import (
-  CausalLMOutputWithPast,
-)
-
-from .config import HybridTransformerConfig
 
 
 def hf_to_internal_config(cfg: HybridTransformerConfig):
@@ -116,8 +110,8 @@ class HybridTransformerForCausalLM(PreTrainedModel):
   def get_output_embeddings(self):
     return self.model.lm_head
 
-  def set_output_embeddings(self, value):
-    self.model.lm_head = value
+  def set_output_embeddings(self, new_embeddings):
+    self.model.lm_head = new_embeddings
 
   def forward(
     self,
@@ -157,7 +151,19 @@ class HybridTransformerForCausalLM(PreTrainedModel):
     attention_mask=None,
     **kwargs,
   ):
+    linear_mask, cu_seqlens = None, None
+    gdn_present = 'gdn' in self.model.cfg.token_mixer
+    intra_doc = self.model.cfg.intra_doc
+
+    if attention_mask is not None:
+      if gdn_present:
+        linear_mask = torch.ones_like(attention_mask.shape[:-1], dtype=torch.bool, device=input_ids.shape)
+      if intra_doc:
+        linear_mask, cu_seqlens = cu_seqlens_from_dense_attention_mask(attention_mask, device=input_ids.device)
+
     return {
       'input_ids': input_ids,
       'attention_mask': attention_mask,
+      'linear_mask': linear_mask,
+      'cu_seqlens': cu_seqlens,
     }

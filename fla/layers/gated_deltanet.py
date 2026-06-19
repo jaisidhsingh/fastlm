@@ -221,7 +221,7 @@ class GatedDeltaNet(nn.Module):
 
     indices = torch.arange(int(_bsz * _ctxlen)).to(dtype=torch.int32, device=hidden_states.device)
     cu_seqlens = kwargs.get('cu_seqlens')
-    if cu_seqlens is not None and self.intra_doc:
+    if cu_seqlens is not None and self.intra_doc and attention_mask is not None:
       hidden_states = hidden_states.reshape(1, -1, _tmpdim).contiguous()
       attention_mask = attention_mask.reshape(1, -1).contiguous()
 

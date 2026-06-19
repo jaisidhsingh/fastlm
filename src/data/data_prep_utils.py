@@ -49,6 +49,49 @@ def intra_doc_masking_linear(
   return attention_mask, boundaries
 
 
+def cu_seqlens_from_dense_attention_mask(attention_mask, device):
+  B, T, _ = attention_mask.shape
+  linear_mask = torch.ones((B, T), dtype=torch.bool, device=device)
+
+  all_doc_lengths = []
+
+  for b in range(B):
+    row_sums = attention_mask[b].sum(dim=1)
+
+    doc_starts = (row_sums == 1).nonzero(as_tuple=False).flatten()
+
+    boundaries = torch.cat([doc_starts, torch.tensor([T], device=attention_mask.device)])
+
+    lengths = boundaries[1:] - boundaries[:-1]
+
+    all_doc_lengths.extend(lengths.tolist())
+
+  cu_seqlens = torch.zeros(
+    len(all_doc_lengths) + 1,
+    dtype=torch.int32,
+    device=attention_mask.device,
+  )
+
+  cu_seqlens[1:] = torch.cumsum(
+    torch.tensor(
+      all_doc_lengths,
+      dtype=torch.int32,
+      device=device,
+    ),
+    dim=0,
+  )
+
+  limit = B * T
+  valid = cu_seqlens <= limit
+  cu_seqlens = cu_seqlens[valid]
+
+  if cu_seqlens[-1] != limit:
+    cu_seqlens = torch.tensor(cu_seqlens.tolist() + [limit]).to(dtype=torch.int32, device=device)
+
+  assert cu_seqlens.argmax() == cu_seqlens.shape[0] - 1, cu_seqlens
+  return linear_mask, cu_seqlens
+
+
 def _get_docs_boundaries(doc_lengths: List[int], n_chunks: int, max_seq_length: int) -> List[List[int]]:
   """
   Get the boundaries of documents in the concatenated chunks.
