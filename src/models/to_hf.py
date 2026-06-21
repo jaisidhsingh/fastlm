@@ -1,4 +1,3 @@
-"""
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -185,4 +184,3 @@ def load_checkpoint_into_hf(hf_model, ckpt_path):
   print('unexpected:', unexpected)
 
   return hf_model
-"""
