@@ -2,9 +2,10 @@ from fractions import Fraction
 
 import wandb
 
-from src.models.to_hf import HFModelConfig
+#from src.models.to_hf import HFModelConfig
 
 
+"""
 def construct_model_config(cfg):
   if cfg.model == 'transformer':
     from .transformer import ModelConfig, Transformer
@@ -32,11 +33,10 @@ def construct_model_config(cfg):
     )
     return model_cfg
 
-
 def construct_hf_config(cfg):
   model_cfg = construct_model_config(cfg)
   return HFModelConfig(**vars(model_cfg))
-
+"""
 
 def construct_model(cfg):
   """Initalize a model from config. Counts parameters."""

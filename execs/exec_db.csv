@@ -30,9 +30,4 @@ gdn,150M,16,all_parallel,1,no,yes,yes,yes,17353118,6
 gdn,150M,32,all_parallel,1,no,yes,yes,yes,17353119,12
 gdn,300M,16,all_parallel,1,yes,no,yes,yes,17358796,6
 gdn,300M,32,all_parallel,1,yes,no,yes,yes,17358797,6
-gdn,300M,16,all_parallel,1,no,yes,yes,yes,17362282,6
-gdn,300M,32,all_parallel,1,no,yes,yes,yes,17362283,12
-attn,20M,64,all_parallel,2,yes,no,yes,yes,17362284,6
-attn,20M,128,all_parallel,2,yes,no,yes,yes,17362285,6
-attn,50M,64,all_parallel,2,yes,no,yes,yes,17362286,6
-attn,50M,128,all_parallel,2,yes,no,yes,yes,17362287,6
+gdn,300M,16,all_parallel,1,no,yes,yes,yes,17362305,6

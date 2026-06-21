@@ -11,13 +11,13 @@
 # echo " "
 # echo "Conda profile sourced and environment activated"
 
-# cd /home/jsingh/projects/fastlm
+cd /home/jsingh/projects/fastlm
 # echo "setup done"
 
 # nvidia-smi
 
 # Job specific vars
-config='/lustre/home/jsingh/projects/fastlm/june_exec/decay_intermediates/cfg-decay_gbs-32_lr-0p002_n-300M.yaml'
+config='/lustre/home/jsingh/projects/fastlm/execs/gdn/300M/tmp.yaml'
 
 
 # Make `torch.compile` happy for GDN implementation

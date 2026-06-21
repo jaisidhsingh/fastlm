@@ -15,6 +15,8 @@ cd /home/jsingh/projects/fastlm
 echo "setup done"
 
 nvidia-smi
+module load cuda/12.4
+nvcc --version
 
 # Job specific vars
 config=$1
