@@ -4,7 +4,7 @@ cd /home/jsingh/projects/fastlm
 
 arch_id="gdn"
 n=("300M")
-gbs=(16)
+gbs=(32)
 lr="all_parallel"
 mode="decay"
 bid=200
