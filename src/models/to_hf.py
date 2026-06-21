@@ -1,3 +1,4 @@
+"""
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -89,7 +90,7 @@ def hf_to_internal_config(cfg: HFModelConfig):
 
 
 class HFModelForCausalLM(PreTrainedModel):
-  config_class = HybridTransformerConfig
+  config_class = HFModelConfig
   base_model_prefix = 'model'
 
   supports_gradient_checkpointing = False
@@ -184,3 +185,4 @@ def load_checkpoint_into_hf(hf_model, ckpt_path):
   print('unexpected:', unexpected)
 
   return hf_model
+"""

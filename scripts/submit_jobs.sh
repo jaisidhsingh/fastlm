@@ -2,13 +2,14 @@
 
 cd /home/jsingh/projects/fastlm
 
-arch_id="gdn"
-n=("300M")
-gbs=(16 32)
+arch_id="attn"
+n=("20M" "50M")
+gbs=(64 128)
 lr="all_parallel"
 mode="main"
-bid=250
+bid=200
 submit="yes"
+routine="train"
 
 for psid in "${n[@]}"; do
   for glbs in "${gbs[@]}"; do
@@ -19,6 +20,7 @@ for psid in "${n[@]}"; do
       --lr $lr \
       --mode $mode \
       --bid $bid \
-      --submit $submit;
+      --submit $submit \
+      --routine $routine;
   done
 done

@@ -8,13 +8,21 @@ import pandas as pd
 import tyro
 import yaml
 
-import src.utils as utils
 from src.constants import DEFAULT_CONFIG, SCALING_LADDER
 
 LR_FLOAT_TO_STR_MAP = {0.00025: '25e-5', 0.0005: '5e-4', 0.001: '1e-3', 0.002: '2e-3', 0.004: '4e-3', 0.008: '8e-3'}
 PARAM_SCALE_ID_TO_MEM_MAP = {'20M': 32, '50M': 64, '150M': 72, '300M': 96}
 DB_PATH = '/home/jsingh/projects/fastlm/execs/exec_db.csv'
 FOLDER = '/home/jsingh/projects/fastlm/execs'
+
+
+def parse_arch_id(arch_id: str) -> tp.Tuple[str, int]:
+  split_id = arch_id.split('_')
+  arch = split_id[0]
+  ratio = 1
+  if len(split_id) == 2:
+    ratio = int(split_id[1].split('-')[0])
+  return arch, ratio
 
 
 @dataclass
@@ -65,7 +73,7 @@ def get_config_content(arch_id, n, gbs, lr, mode):
   # model specifications first
   base_cfg['arch_id'] = arch_id
   base_cfg['param_scale_id'] = n
-  mixer, ratio = utils.parse_arch_id(arch_id)
+  mixer, ratio = parse_arch_id(arch_id)
   base_cfg['token_mixer'] = mixer
   base_cfg['hybrid_mixer_ratio'] = ratio
 
