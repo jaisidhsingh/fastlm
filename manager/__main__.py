@@ -43,9 +43,9 @@ def check_subfolders(cfg):
 
 
 def get_dp_value(n, gbs):
-  if gbs in [16, 32]:
+  if gbs in [16, 32, 64]:
     return 1
-  elif gbs in [64, 128]:
+  elif gbs == 128:
     if n in ['20M', '50M']:
       return 2
     else:  # n in ["150M", "300M"]
@@ -93,6 +93,8 @@ def get_config_content(arch_id, n, gbs, lr, mode):
   base_cfg['lr'] = lr
   if n in ['150M', '300M']:
     base_cfg['beta2'] = 0.95
+  base_cfg['warmup_steps'] = 2000
+  base_cfg['cooldown_steps'] = 0.2
 
   # saving
   base_cfg['save_last_checkpoint'] = True

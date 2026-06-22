@@ -6,6 +6,7 @@ from time import perf_counter
 
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 import seaborn as sns
 from matplotlib.colors import to_rgb
 
@@ -128,7 +129,7 @@ def plot_lr_sweep(arch_id):
             # edgecolor='black',
           )
 
-      ax[ii, jj].set_xlim([0.75 * 2 ** (-13), 0.75 * 2 ** (-6)])
+      ax[ii, jj].set_xlim([0.75 * 2 ** (-12), 0.75 * 2 ** (-6)])
       ax[ii, jj].set_ylim([3.0, 4.4])
       ax[ii, jj].set_xscale('log', base=2)
       ax[ii, jj].set_xlabel(r'$\eta$')
@@ -150,7 +151,7 @@ def plot_n_d_laws(arch_id):
   fig, ax = plt.subplots(
     1,
     2,
-    figsize=(10, 6),  # scale this up — width per column ~5-6in, height per row ~5in
+    figsize=(10, 6),
     sharey=False,
   )
   n, gbs = '150M', 32
@@ -211,7 +212,7 @@ def plot_n_d_laws(arch_id):
   d = '3.0B'
   n_lrs = []
   n_lvs = []
-  ns = P[:3]
+  ns = P
   for n in ns:
     color = BASE_COLORS[n]
     color = np.array(to_rgb(color))
@@ -257,7 +258,7 @@ def plot_n_d_laws(arch_id):
   ax[1].plot(x_fit, y_fit, linestyle='--', color='black', label=rf'{round(a, 3)} * $\log x + $ {round(b, 3)}')
   ax[1].set_title(f'D={d}, GBS={gbs}')
   ax[1].set_xscale('log', base=2)
-  ax[1].set_xlim([0.75 * 2 ** (-13), 0.75 * 2 ** (-6)])
+  ax[1].set_xlim([0.75 * 2 ** (-12), 0.75 * 2 ** (-6)])
   ax[1].set_ylim([3.0, 4.4])
   ax[1].set_xlabel(r'$\eta$')
   ax[1].set_ylabel(r'$\mathcal{L}_{\text{valid}}$')
@@ -270,14 +271,13 @@ def plot_n_d_laws(arch_id):
 
 
 def find_opt_lr_law(arch_id):
-  # restrict to 150M
   gbs = 32
   print(f'ARCH={arch_id}, GBS={gbs}')
   t = load_data(ns=P, ds=Q, gbss=B, lrs=H, arch_id=arch_id)
-  t = t.at(n=P[:3], gbs=gbs)
+  t = t.at(n=P, gbs=gbs)
   _d = []
 
-  for jj, n in enumerate(P[:3]):
+  for jj, n in enumerate(P):
     for d in Q:
       y = t.at(n=n, d=d)
 
@@ -326,18 +326,24 @@ def find_opt_lr_law(arch_id):
   c = round(float(c), 3)
   r2 = round(float(r2), 3)
 
-  plt.bar(
-    labels,
-    values,
-    color=['#4C72B0', '#9B59B6', '#E74C3C', '#F39C12'],
-    label=rf'{round(a, 3)} * $\log N +$ {round(b, 3)} * $\log D + $ {round(c, 3)}',
-  )
-  for l, v in zip(labels, values):
-    plt.annotate(str(round(v, 3)), (l, v + 0.67 * v))
+  fig, ax = plt.subplots(1, 2, figsize=(10, 6))
+  df = pd.DataFrame({'LR': _lr, 'N': _N, 'D': _D})
 
-  plt.title(f'ARCH={arch_id}, GBS={gbs}')
-  plt.legend()
+  sns.lmplot(data=df, x='N', y='LR', hue='D', palette='rocket', markers='o', ci=None, legend=True)
+  plt.legend(title='D')
+  plt.title(
+    f'ARCH={arch_id}, GBS={gbs}' + '\n' + rf'{round(a, 3)} * $\log N +$ {round(b, 3)} * $\log D + $ {round(c, 3)}'
+  )
   plt.savefig(f'./plots/{arch_id}_3.png', dpi=300, bbox_inches='tight')
+  plt.cla()
+  plt.clf()
+
+  sns.lmplot(data=df, x='D', y='LR', hue='N', palette='mako', markers='o', ci=None, legend=True)
+  plt.legend(title='N')
+  plt.title(
+    f'ARCH={arch_id}, GBS={gbs}' + '\n' + rf'{round(a, 3)} * $\log N +$ {round(b, 3)} * $\log D + $ {round(c, 3)}'
+  )
+  plt.savefig(f'./plots/{arch_id}_4.png', dpi=300, bbox_inches='tight')
   plt.cla()
   plt.clf()
 

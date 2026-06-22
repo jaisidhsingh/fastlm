@@ -138,7 +138,7 @@ DEFAULT_CONFIG = {
   # SCHEDULER
   'scheduler': 'wsd',
   'warmup_steps': 2000,
-  'cooldown_steps': 4000,
+  'cooldown_steps': 0.2,
   'lr_start': 0.0,
   'lr_end': 1e-5,
   'lr_end_pct': None,

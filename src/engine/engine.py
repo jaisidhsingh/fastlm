@@ -124,12 +124,15 @@ class TorchEngine(torch.nn.Module):
       if not cfg.cooldown_only:
         self.scheduler.load_state_dict(ckpt['scheduler'])
       else:
+        cooldown_steps = (
+          cfg.cooldown_steps if isinstance(cfg.cooldown_steps, int) else int(cfg.steps_budget * cfg.cooldown_steps)
+        )
         self.scheduler = LinearCooldown(
           self.optimizer,
           lr_max=cfg.lr,
           lr_end=cfg.lr_end if (cfg.lr_end is not None) else (cfg.lr_end_pct * cfg.lr),
           cooldown_start_step=0,
-          cooldown_steps=cfg.cooldown_steps,
+          cooldown_steps=cooldown_steps,
         )
 
     # if cfg.count_flops:

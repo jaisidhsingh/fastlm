@@ -25,7 +25,10 @@ def create_save_steps(cfg, world_size):
     points_to_save_at = [
       t // (cfg.micro_batch_size * cfg.grad_accumulation_steps * cfg.seq_len * world_size) for t in points_to_save_at
     ]
-    points_to_save_at = [t - cfg.cooldown_steps for t in points_to_save_at]
+    cooldown_steps = (
+      cfg.cooldown_steps if isinstance(cfg.cooldown_steps, int) else int(cfg.cooldown_steps * cfg.steps_budget)
+    )
+    points_to_save_at = [t - cooldown_steps for t in points_to_save_at]
     names = []
 
     for i in range(len(points_to_save_at)):
@@ -39,7 +42,10 @@ def create_save_steps(cfg, world_size):
     return {k: v for k, v in zip(points_to_save_at, names)}
 
   if cfg.resume and cfg.cooldown_only:
-    return {cfg.cooldown_steps + cfg.resume_step: f'decayed_to_{cfg.token_budget_id.replace(".", "p")}'}
+    cooldown_steps = (
+      cfg.cooldown_steps if isinstance(cfg.cooldown_steps, int) else int(cfg.cooldown_steps * cfg.steps_budget)
+    )
+    return {cooldown_steps + cfg.resume_step: f'decayed_to_{cfg.token_budget_id.replace(".", "p")}'}
 
   return None
 
