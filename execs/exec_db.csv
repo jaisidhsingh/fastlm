@@ -1,1 +1,5 @@
 arch_id,n,gbs,lr,dp,main,decay,cfg,sub,cluster_id,n_jobs
+attn,20M,16,all_parallel,1,yes,no,yes,yes,17363031,6
+attn,20M,32,all_parallel,1,yes,no,yes,yes,17363032,6
+attn,50M,16,all_parallel,1,yes,no,yes,yes,17363033,6
+attn,50M,32,all_parallel,1,yes,no,yes,yes,17363034,6
