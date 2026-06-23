@@ -352,12 +352,12 @@ def find_opt_lr_law(arch_id):
 
 
 def main(arch_id):
-  # plot_lr_sweep(arch_id)
-  # plot_n_d_laws(arch_id)
+  plot_lr_sweep(arch_id)
+  plot_n_d_laws(arch_id)
   find_opt_lr_law(arch_id)
 
 
 if __name__ == '__main__':
   sns.set_style('whitegrid')
   main('attn')
-  main('gdn')
+  #main('gdn')

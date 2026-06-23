@@ -43,9 +43,9 @@ def check_subfolders(cfg):
 
 
 def get_dp_value(n, gbs):
-  if gbs in [16, 32, 64]:
+  if gbs in [16, 32]:
     return 1
-  elif gbs == 128:
+  elif gbs in [64, 128]:
     if n in ['20M', '50M']:
       return 2
     else:  # n in ["150M", "300M"]
