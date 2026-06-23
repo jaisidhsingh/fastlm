@@ -3,3 +3,11 @@ attn,20M,16,all_parallel,1,yes,no,yes,yes,17363031,6
 attn,20M,32,all_parallel,1,yes,no,yes,yes,17363032,6
 attn,50M,16,all_parallel,1,yes,no,yes,yes,17363033,6
 attn,50M,32,all_parallel,1,yes,no,yes,yes,17363034,6
+attn,20M,64,all_parallel,1,yes,no,yes,yes,17363652,6
+attn,50M,64,all_parallel,1,yes,no,yes,yes,17363653,6
+attn,150M,16,all_parallel,1,yes,no,yes,yes,17363663,6
+attn,150M,32,all_parallel,1,yes,no,yes,yes,17363664,6
+attn,150M,64,all_parallel,1,yes,no,yes,yes,17363665,6
+attn,300M,16,all_parallel,1,yes,no,yes,yes,17363666,6
+attn,300M,32,all_parallel,1,yes,no,yes,yes,17363667,6
+attn,300M,64,all_parallel,1,yes,no,yes,yes,17363668,6

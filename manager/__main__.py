@@ -163,7 +163,7 @@ log = $(LOGS_DIR)/log/job.$(Cluster).$(Process).log
 request_memory = {mem}G
 request_cpus = {cpus}
 request_gpus = {dp}
-requirements = (TARGET.CUDADeviceName == "NVIDIA A100-SXM4-80GB" || TARGET.CUDADeviceName == "NVIDIA H100 80GB HBM3")
+requirements = (TARGET.CUDADeviceName == "NVIDIA A100-SXM4-80GB" || TARGET.CUDADeviceName == "NVIDIA H100 80GB HBM3" || TARGET.CUDADeviceName == "NVIDIA H100") && (Machine != "g174.internal.cluster.is.localnet")
 
 queue $(n_jobs)
   """

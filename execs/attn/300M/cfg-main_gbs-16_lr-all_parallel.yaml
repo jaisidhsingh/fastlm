@@ -4,7 +4,7 @@ attn_qk_norm: true
 beta1: 0.9
 beta2: 0.95
 cooldown_only: false
-cooldown_steps: 4000
+cooldown_steps: 0.2
 d_model: 768
 deterministic: false
 dtype: bfloat16
