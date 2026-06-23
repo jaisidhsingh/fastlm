@@ -51,13 +51,11 @@ The output should look like this:
 import multiprocessing as mp
 import os
 
-# # This will override FileLock globally to use SoftFileLock.
-# # Uncomment on filesystems do not support FileLock.
-import filelock
-
-filelock.FileLock = filelock.SoftFileLock
-os.environ['SOFT_FILELOCK'] = '1'
-
+# # # This will override FileLock globally to use SoftFileLock.
+# # # Uncomment on filesystems do not support FileLock.
+# import filelock
+# filelock.FileLock = filelock.SoftFileLock
+# os.environ['SOFT_FILELOCK'] = '1'
 from functools import partial
 from timeit import default_timer as timer
 
