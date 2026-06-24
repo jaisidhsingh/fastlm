@@ -39,8 +39,8 @@ optim: adamw
 param_scale_id: 300M
 print_progress: true
 residual_connection: add
-resume: False
-resume_exp_name: null
+resume: True
+resume_exp_name: warmup_done
 resume_step: null
 rms_norm: true
 sampler: sequential

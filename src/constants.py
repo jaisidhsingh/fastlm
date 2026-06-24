@@ -52,9 +52,6 @@ SCALING_LADDER = {
   'batch_sizes': [16, 32, 64, 128, 256, 512],
   'batch_size_vs_token_budget_strategy': {
     'staggered_grid': {
-      # '0.01B': [16, 32, 64, 128],
-      # '0.02B': [16, 32, 64, 128],
-      # '0.05B': [16, 32, 64, 128],
       '0.5B': [16, 32, 64, 128],
       '1.0B': [16, 32, 64, 128],
       '3.0B': [32, 64, 128, 256],
@@ -70,7 +67,6 @@ SCALING_LADDER = {
       512: '15.0B',
     },
   },
-  # 'learning_rates': [0.0025, 0.005, 0.01, 0.02, 0.04, 0.08],
   'learning_rates': [0.00025, 0.0005, 0.001, 0.002, 0.004, 0.008],
   'gradient_accumulation_steps': [1, 2, 4, 8],
   'warmup_steps': 2000,

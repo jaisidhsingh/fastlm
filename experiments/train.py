@@ -40,6 +40,8 @@ def main(argv):
 
   # Load checkpoint
   ckpt = maybe_load_checkpoint(cfg, world_size)
+  if ckpt is not None:
+    cfg.resume_step = ckpt['step']
 
   # Dataset
   trainloader, validloader = get_dataloaders(cfg)
@@ -97,7 +99,6 @@ def main(argv):
   resume_step = None
   if ckpt is not None:
     resume_step = ckpt['step']
-    cfg.resume_step = resume_step
     cfg.save_last_checkpoint = False
     reached_new_data = False
     print_master(f'Resuming state from step={resume_step}, cooldown only={cfg.cooldown_only}')

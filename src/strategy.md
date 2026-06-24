@@ -14,13 +14,13 @@ We make a setup with $P=4$ budgets for parameter count $N$, i.e., $N \in \{20\te
 
 We define a grid of $B=6$ global batch sizes $b \in \{16, 32, 64, 128, 256, 512\}$ and $H=6$ learning rates $\eta \in \{0.0025,0.005,0.01,0.02,0.04,0.08\}$. Since, training each $(b, \eta)$ configuration on all $(N, D)$ values will be too costly, we use small batch sizes for small token budgets and large batch sizes for larger ones, reducing the set of candidate batch sizes to $4$ for each token budget. Additionally, we keep at least $3$ values common between the $4$ candidates of two adjacent token budgets. This creates the _staggered_ configuration given as follows:
 
-| **D**   |     |     | **b** |     |     |     |
-| ------- | --- | --- | ----- | --- | --- | --- |
-| **3B**  | 16  | 32  | 64    | 128 |     |     |
-| **6B**  | 16  | 32  | 64    | 128 |     |     |
-| **9B**  |     | 32  | 64    | 128 | 256 |     |
-| **12B** |     |     | 64    | 128 | 256 | 512 |
-| **15B** |     |     | 64    | 128 | 256 | 512 |
+| **D**    |     |     | **b** |     |     |     |
+| -------- | --- | --- | ----- | --- | --- | --- |
+| **0.5B** | 16  | 32  | 64    |     |     |     |
+| **1B**   | 16  | 32  | 64    | 128 |     |     |
+| **3B**   |     | 32  | 64    | 128 | 256 |     |
+| **7.5B** |     |     | 64    | 128 | 256 | 512 |
+| **15B**  |     |     | 64    | 128 | 256 | 512 |
 
 Since we want to use a fixed warmup of $2000$ steps, we further prune values of $b$ that will not allow this condition to be fulfilled. Hence, for each value of $N$ and $\eta$, we would only need to make a maximum of $B$ training runs for all token budgets because we use WSD as our learning rate schedule (we can arrive at intermediate token budgets by decaying saved checkpoints). Note that we could have trained the model for 15B tokens for each batch size, however, this staggered approach allows for more savings in terms of total GPU-hours.
 

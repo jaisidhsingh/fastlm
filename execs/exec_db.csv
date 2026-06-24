@@ -10,4 +10,11 @@ attn,150M,32,all_parallel,1,yes,no,yes,yes,17363664,6
 attn,150M,64,all_parallel,1,yes,no,yes,yes,17363665,6
 attn,300M,16,all_parallel,1,yes,no,yes,yes,17363666,6
 attn,300M,32,all_parallel,1,yes,no,yes,yes,17363667,6
-attn,300M,64,all_parallel,1,yes,no,yes,yes,17363668,6
+attn,20M,16,all_parallel,1,yes,no,yes,yes,17366596,6
+attn,20M,32,all_parallel,1,yes,no,yes,yes,17366597,6
+attn,50M,16,all_parallel,1,yes,no,yes,yes,17366598,6
+attn,50M,32,all_parallel,1,yes,no,yes,yes,17366599,6
+attn,20M,16,all_parallel,1,yes,no,yes,yes,17366651,6
+attn,20M,32,all_parallel,1,yes,no,yes,yes,17366652,6
+attn,50M,16,all_parallel,1,yes,no,yes,yes,17366653,6
+attn,50M,32,all_parallel,1,yes,no,yes,yes,17366654,6
