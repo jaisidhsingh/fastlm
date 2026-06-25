@@ -12,8 +12,8 @@ from src.constants import DEFAULT_CONFIG, SCALING_LADDER
 
 LR_FLOAT_TO_STR_MAP = {0.00025: '25e-5', 0.0005: '5e-4', 0.001: '1e-3', 0.002: '2e-3', 0.004: '4e-3', 0.008: '8e-3'}
 PARAM_SCALE_ID_TO_MEM_MAP = {'20M': 32, '50M': 64, '150M': 72, '300M': 96}
-DB_PATH = '/home/jsingh/projects/fastlm/execs/exec_db.csv'
-FOLDER = '/home/jsingh/projects/fastlm/execs'
+DB_PATH = '/projects/p_neurasearch/fastlm/execs/exec_db.csv'
+FOLDER = '/projects/p_neurasearch/fastlm/execs'
 
 
 def parse_arch_id(arch_id: str) -> tp.Tuple[str, int]:
@@ -27,7 +27,6 @@ def parse_arch_id(arch_id: str) -> tp.Tuple[str, int]:
 
 @dataclass
 class ManagerConfig:
-  bid: int = 1
   arch_id: str = 'attn'
   n: str = '20M'
   gbs: int = 32
@@ -43,9 +42,9 @@ def check_subfolders(cfg):
 
 
 def get_dp_value(n, gbs):
-  if gbs in [16, 32, 64]:
+  if gbs in [16, 32]:
     return 1
-  elif gbs == 128:
+  elif gbs in [64, 128]:
     if n in ['20M', '50M']:
       return 2
     else:  # n in ["150M", "300M"]
@@ -59,12 +58,12 @@ def get_dp_value(n, gbs):
 
 def get_config_path(arch_id, n, gbs, lr, mode):
   lr_ext = 'all_parallel' if isinstance(lr, list) else LR_FLOAT_TO_STR_MAP[lr]
-  return f'/lustre/home/jsingh/projects/fastlm/execs/{arch_id}/{n}/cfg-{mode}_gbs-{gbs}_lr-{lr_ext}.yaml'
+  return f'/projects/p_neurasearch/fastlm/execs/{arch_id}/{n}/cfg-{mode}_gbs-{gbs}_lr-{lr_ext}.yaml'
 
 
 def get_jobfile_path(arch_id, n, gbs, lr, mode):
   lr_ext = 'all_parallel' if isinstance(lr, list) else LR_FLOAT_TO_STR_MAP[lr]
-  return f'/lustre/home/jsingh/projects/fastlm/execs/{arch_id}/{n}/job-{mode}_gbs-{gbs}_lr-{lr_ext}.sub'
+  return f'/projects/p_neurasearch/fastlm/execs/{arch_id}/{n}/job-{mode}_gbs-{gbs}_lr-{lr_ext}.sh'
 
 
 def get_config_content(arch_id, n, gbs, lr, mode):
@@ -117,6 +116,7 @@ def get_config_content(arch_id, n, gbs, lr, mode):
     # `utils.load_config` can split the list into individual runs
     # and submit decays jobs in parallel. `checkpoint_utils` will use
     # `token_budget_id` to load in the correct checkpoint
+    base_cfg['scheduler'] = 'linear_cooldown'
     base_cfg['token_budget_id'] = budgets_to_decay_at
     base_cfg['resume'] = True
     base_cfg['resume_step'] = None
@@ -132,41 +132,51 @@ def get_config_content(arch_id, n, gbs, lr, mode):
 
 def get_jobfile_content(arch_id, n, gbs, lr, n_jobs, mode, cpus=8):
   dp = get_dp_value(n, gbs)
-  single_or_multi = 'single' if dp == 1 else 'multi'
   mem = PARAM_SCALE_ID_TO_MEM_MAP[n]
 
-  args = '$(config) $(Process) $(Cluster)'
-  if dp > 1:
-    args = args + ' $(dp)'
+  config = get_config_path(arch_id, n, gbs, lr, mode)
+  if isinstance(lr, float):
+    lr_ext = str(lr)
+  elif isinstance(lr, list):
+    if len(lr) == len(list(LR_FLOAT_TO_STR_MAP.keys())):
+      lr_ext = 'all_parallel'
+    else:
+      lr_ext = str(len(lr)) + 'lrs'
+  else:
+    raise NotImplementedError('`lr` must be an instance of `float` or `list`. You provided an unsupported type.')
 
-  return f"""# Executable should be a full path
-executable=/home/jsingh/projects/fastlm/cluster/{single_or_multi}_gpu/condor.sh
+  name = f'{arch_id}-{mode}_n-{n}_gbs-{gbs}_lr-{lr_ext}'
 
-# Hyperparmeters are specified in a YAML configuration file
-config={get_config_path(arch_id, n, gbs, lr, mode)}
+  return f"""#!/bin/bash
+#SBATCH --job-name=fastlm
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task={cpus}
+#SBATCH --mem={mem}G
+#SBATCH --gres=gpu:{dp}
+#SBATCH --time=24:00:00
+#SBATCH --account=p_neurasearch
+#SBATCH --job-name={name}
+#SBATCH --output=/data/horse/ws/jasi149i-fastlm/logs/june/out/job-%A_%a.out
+#SBATCH --error=/data/horse/ws/jasi149i-fastlm/logs/june/err/job-%A_%a.err
+#SBATCH --array=0-{n_jobs - 1}
 
-# Queue as many jobs as points in the hyperaparameter grid
-n_jobs={n_jobs}
-dp={dp}
+CONFIG={config}
+DP={dp}
+HOST=$(hostname -f)
 
-# Pass arguments to the executable
-arguments = {args}
+cd /projects/p_neurasearch/fastlm
 
-# Logs
-LOGS_DIR=/fast/jsingh/logs/fastlm/june/attn
-
-error = $(LOGS_DIR)/err/job.$(Cluster).$(Process).err
-output = $(LOGS_DIR)/out/job.$(Cluster).$(Process).out
-log = $(LOGS_DIR)/log/job.$(Cluster).$(Process).log
-
-# Job requirements
-request_memory = {mem}G
-request_cpus = {cpus}
-request_gpus = {dp}
-requirements = (TARGET.CUDADeviceName == "NVIDIA A100-SXM4-80GB" || TARGET.CUDADeviceName == "NVIDIA H100 80GB HBM3")
-
-queue $(n_jobs)
-  """
+if [ "$DP" -eq 1 ]; then
+    bash cluster/single_gpu/slurm.sh "$CONFIG" "$SLURM_ARRAY_TASK_ID" "$SLURM_JOB_ID"
+else
+  if [ "$HOST" == *capella* && "$DP" -eq 8]; then
+    bash cluster/multi_gpu/multinode_slurm.sh "$CONFIG" "$SLURM_ARRAY_TASK_ID" "$SLURM_JOB_ID" "$DP"
+  else
+    bash cluster/multi_gpu/slurm.sh "$CONFIG" "$SLURM_ARRAY_TASK_ID" "$SLURM_JOB_ID" "$DP"
+  fi
+fi
+"""
 
 
 def sanity_check():
@@ -252,13 +262,14 @@ def train_management(cfg: ManagerConfig):
   # then use this config path in the submission file
   jobfile_path = get_jobfile_path(cfg.arch_id, cfg.n, cfg.gbs, lr, cfg.mode)
   jobfile_content = get_jobfile_content(cfg.arch_id, cfg.n, cfg.gbs, lr, n_jobs, cfg.mode)
+
   with open(jobfile_path, 'w') as f:
     f.write(jobfile_content)
 
   if cfg.submit == 'yes':
     # submit this job
     result = subprocess.run(
-      ['condor_submit_bid', f'{cfg.bid}', jobfile_path],  # command and arguments
+      ['sbatch', jobfile_path],  # command and arguments
       capture_output=True,  # capture stdout/stderr
       text=True,  # return strings instead of bytes
     )

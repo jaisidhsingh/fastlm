@@ -101,8 +101,7 @@ flags.DEFINE_boolean('save_tokenizer', False, 'Save the tokenizer to disk. Ignor
 FLAGS = flags.FLAGS
 
 TOKENIZER_MAP = {
-  'gpt2': '/home/jsingh/saved_tokenizers/better-gpt2',
-  'gpt-neox': '/home/jsingh/saved_tokenizers/gpt-neox',
+  'gpt2': '/data/horse/ws/jasi149i-fastlm/tokenizers/gpt2',
 }
 
 

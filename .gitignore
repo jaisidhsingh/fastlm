@@ -16,6 +16,7 @@ env/
 *.tmp
 *.bak
 *.swp
+*.egg.info
 
 # Ignore specific system files
 .DS_Store

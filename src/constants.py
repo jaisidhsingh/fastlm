@@ -79,24 +79,24 @@ SCALING_LADDER = {
   'throughput_analysis_steps': 100,
 }
 
-SCALING_RESULTS_FOLDER = '/fast/jsingh/projects/fastlm/june/results/'
+SCALING_RESULTS_FOLDER = '/data/horse/ws/jasi149i-fastlm/results'
 
-ANALYSIS_RESULTS_FOLDER = '/home/jsingh/projects/fastlm/drawings/analyses'
+ANALYSIS_RESULTS_FOLDER = '/projects/p_neurasearch/fastlm/drawings/analyses'
 
 DEFAULT_CONFIG = {
   'deterministic': False,
   'seed': 123,
   'measure_throughput': False,
   # DATA
-  'trainset_path': '/fast/jsingh/data/nemotron-cc-sample-mtsynth/tokenized_gpt2/ctx_2048/train',
+  'trainset_path': '/data/horse/ws/jasi149i-fastlm/data/nemotron-cc-sample-mtsynth/tokenized_gpt2/ctx_2048/train',
   'vocab_size': 50304,
   'seq_len': 2048,
   'intra_doc_masking': True,
   'sampler': 'sequential',
   'sampler_seed': None,
-  'num_workers': 4,
+  'num_workers': 8,
   'eval': True,
-  'validset_path': '/fast/jsingh/data/nemotron-cc-sample-mtsynth/tokenized_gpt2/ctx_2048/valid',
+  'validset_path': '/data/horse/ws/jasi149i-fastlm/data/nemotron-cc-sample-mtsynth/tokenized_gpt2/ctx_2048/valid',
   'num_evals': 20,
   'eval_every_steps': -1,
   # MODEL
@@ -150,7 +150,7 @@ DEFAULT_CONFIG = {
   'wandb_mode': 'offline',
   'wandb_project': 'hparam-sweep',
   'wandb_entity': 'msc-thesis-jaisidh',
-  'wandb_dir': '/fast/jsingh/projects/fastlm/june/wandb',
+  'wandb_dir': '/data/horse/ws/jasi149i-fastlm/wandb_logs',
   'wandb_run_name': 'attn-20M_gbs-32',
   'exp_name': 'attn-20M_gbs-32',
   # RESUME

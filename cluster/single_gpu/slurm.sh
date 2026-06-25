@@ -1,24 +1,37 @@
 #!/bin/bash
 
-#SBATCH --job-name=plainLM_test
-#SBATCH --error=/ptmp/najroldi/logs/plainLM/err/%x_%A_%a.err
-#SBATCH --output=/ptmp/najroldi/logs/plainLM/out/%x_%A_%a.out
-#SBATCH --time=00:15:00
-#SBATCH --requeue
-#SBATCH --gres=gpu:a100:1
-#SBATCH --cpus-per-task=12
-#SBATCH --mem=125000
-#SBATCH --ntasks=1
-#SBATCH --array=1
+source /home/jasi149i/.bashrc
+source /data/horse/ws/jasi149i-fastlm/envs/pt/bin/activate
+cd /projects/p_neurasearch/fastlm
 
-source ~/miniconda3/etc/profile.d/conda.sh
-conda activate plainLM
+nvidia-smi
+module load CUDA/13.0.0
+nvcc --version
 
-# Hyperparmeters are specified in a YAML configuration file
-config=config/config.yaml
+CONFIG=$1
+SLURM_ARRAY_TASK_ID=$2
+SLURM_JOB_ID=$3
 
-# SLURM job arrays range from 1 to n
-job_idx=$((SLURM_ARRAY_TASK_ID - 1))
+mp_cache="/tmp/mp/${SLURM_JOB_ID}_${SLURM_ARRAY_TASK_ID}"
+wandb_cache="/tmp/wandb/${SLURM_JOB_ID}_${SLURM_ARRAY_TASK_ID}"
+triton_cache="/tmp/triton/${SLURM_JOB_ID}_${SLURM_ARRAY_TASK_ID}"
+inductor_cache="/tmp/inductor/${SLURM_JOB_ID}_${SLURM_ARRAY_TASK_ID}"
+
+mkdir -p $mp_cache
+mkdir -p $wandb_cache
+mkdir -p $triton_cache
+mkdir -p $inductor_cache
+
+export TMPDIR=$mp_cache
+export WANDB_CACHE_DIR=$wandb_cache
+export TRITON_CACHE_DIR=$triton_cache
+export TORCHINDUCTOR_CACHE_DIR=$inductor_cache
 
 # Execute python script
-python train.py --config=$config --job_idx=$job_idx
+cd /projects/p_neurasearch/fastlm
+python -m experiments.train \
+  --config=$CONFIG \
+  --job_idx=$SLURM_ARRAY_TASK_ID \
+  --job_cluster=$SLURM_JOB_ID;
+
+rm -rf $mp_cache $wandb_cache $triton_cache $inductor_cache

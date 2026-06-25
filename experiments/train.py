@@ -40,6 +40,8 @@ def main(argv):
 
   # Load checkpoint
   ckpt = maybe_load_checkpoint(cfg, world_size)
+  if ckpt is not None:
+    cfg.resume_step = ckpt['step']
 
   # Dataset
   trainloader, validloader = get_dataloaders(cfg)
@@ -58,12 +60,8 @@ def main(argv):
   cfg.steps_budget = steps_budget
   engine = TorchEngine(model, cfg, device, local_rank, ckpt)
 
-  if cfg.scheduler == 'linear_cooldown':
-    steps_budget = cfg.resume_step + engine.scheduler.cooldown_steps
-    cfg.steps_budget = steps_budget
-
   print_master(
-    f'Training will run for {steps_budget} steps, or, {steps_budget * cfg.grad_accumulation_steps} micro steps'
+    f'Training till {steps_budget} step point, or, {steps_budget * cfg.grad_accumulation_steps} micro step point'
   )
 
   # How long do we wanna train for (takes into account resume + cooldown)
@@ -97,15 +95,20 @@ def main(argv):
   resume_step = None
   if ckpt is not None:
     resume_step = ckpt['step']
-    cfg.resume_step = resume_step
     cfg.save_last_checkpoint = False
     reached_new_data = False
     print_master(f'Resuming state from step={resume_step}, cooldown only={cfg.cooldown_only}')
 
   # When do we want to save
   # exp_folder = utils.get_exp_dir_path(cfg, world_size)
-  save_points = create_save_steps(cfg, world_size)
-  assert save_points is not None, "Save tracking is incorrect, & this is a problem even if we're not saving anything."
+  save_points, save_toks = create_save_steps(cfg, world_size)
+  assert save_points is not None and save_toks is not None, (
+    "Save tracking is incorrect, & this is a problem even if we're not saving anything."
+  )
+  print('Saving at step points...')
+  for k, v in save_points.items():
+    print(f'Step point: {k}, save name: {v}')
+  print('Saving at token points', save_toks)
 
   # Training
   for micro_step, micro_batch in enumerate(trainloader, micro_step_start + 1):
@@ -117,7 +120,7 @@ def main(argv):
         continue
       else:
         if not reached_new_data:
-          steps_budget += resume_step
+          # steps_budget += resume_step
           reached_new_data = True
 
     if step > steps_budget and is_step:

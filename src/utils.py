@@ -67,6 +67,14 @@ def set_token_budget_id_from_gbs(cfg):
   if not cfg.resume:
     mp = SCALING_LADDER['batch_size_vs_token_budget_strategy']['staggered_runs']
     cfg.token_budget_id = mp[cfg.global_batch_size]
+  if cfg.resume:
+    if cfg.cooldown_only:
+      # then we will train until we reach `cfg.token_budget_id` tokens, should already exist in the `.yaml` file
+      assert cfg.token_budget_id is not None
+    else:
+      # then we know that we want to keep training
+      mp = SCALING_LADDER['batch_size_vs_token_budget_strategy']['staggered_runs']
+      cfg.token_budget_id = mp[cfg.global_batch_size]
 
 
 def get_steps_from_token_budget_id(cfg, world_size):
@@ -80,8 +88,9 @@ def get_steps_budget(cfg, world_size: int) -> int:
     return get_steps_from_token_budget_id(cfg, world_size)
   else:
     if cfg.cooldown_only:
-      return cfg.cooldown_steps
+      return get_steps_from_token_budget_id(cfg, world_size)
     else:
+      assert cfg.resume_step is not None
       return get_steps_from_token_budget_id(cfg, world_size)
 
 

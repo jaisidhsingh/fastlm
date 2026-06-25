@@ -1,14 +1,13 @@
 #!/bin/bash
 
-cd /home/jsingh/projects/fastlm
+cd /projects/p_neurasearch/fastlm
 
 arch_id=("attn")
-n=("20M" "50M")
-gbs=(16 32)
+n=("50M")
+gbs=(64)
 lr="all_parallel"
 mode="main"
-bid=200
-submit="yes"
+submit="no"
 routine="train"
 
 for aid in "${arch_id[@]}"; do
@@ -20,7 +19,6 @@ for aid in "${arch_id[@]}"; do
         --gbs "$glbs" \
         --lr $lr \
         --mode $mode \
-        --bid $bid \
         --submit $submit \
         --routine $routine;
     done
