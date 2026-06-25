@@ -18,3 +18,13 @@ attn,20M,16,all_parallel,1,yes,no,yes,yes,17366651,6
 attn,20M,32,all_parallel,1,yes,no,yes,yes,17366652,6
 attn,50M,16,all_parallel,1,yes,no,yes,yes,17366653,6
 attn,50M,32,all_parallel,1,yes,no,yes,yes,17366654,6
+attn,20M,16,all_parallel,1,no,yes,yes,yes,17368548,6
+attn,20M,16,all_parallel,1,no,yes,yes,yes,17368550,6
+attn,20M,16,all_parallel,1,yes,no,yes,yes,17368562,6
+attn,20M,32,all_parallel,1,yes,no,yes,yes,17368563,6
+attn,50M,16,all_parallel,1,yes,no,yes,yes,17368564,6
+attn,50M,32,all_parallel,1,yes,no,yes,yes,17368565,6
+gdn,20M,16,all_parallel,1,yes,no,yes,yes,17368566,6
+gdn,20M,32,all_parallel,1,yes,no,yes,yes,17368567,6
+gdn,50M,16,all_parallel,1,yes,no,yes,yes,17368568,6
+gdn,50M,32,all_parallel,1,yes,no,yes,yes,17368569,6

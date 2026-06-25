@@ -88,10 +88,10 @@ def get_steps_budget(cfg, world_size: int) -> int:
     return get_steps_from_token_budget_id(cfg, world_size)
   else:
     if cfg.cooldown_only:
-      return cfg.cooldown_steps
+      return get_steps_from_token_budget_id(cfg, world_size)
     else:
       assert cfg.resume_step is not None
-      return get_steps_from_token_budget_id(cfg, world_size) - cfg.resume_step
+      return get_steps_from_token_budget_id(cfg, world_size)
 
 
 def load_config_from_constants(param_scale_id):

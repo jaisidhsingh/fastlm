@@ -146,7 +146,7 @@ DEFAULT_CONFIG = {
   'wandb_mode': 'offline',
   'wandb_project': 'hparam-sweep',
   'wandb_entity': 'msc-thesis-jaisidh',
-  'wandb_dir': '/fast/jsingh/projects/fastlm/june/wandb',
+  'wandb_dir': '/fast/jsingh/projects/fastlm/wandb_logs/june/better',
   'wandb_run_name': 'attn-20M_gbs-32',
   'exp_name': 'attn-20M_gbs-32',
   # RESUME

@@ -118,6 +118,7 @@ def get_config_content(arch_id, n, gbs, lr, mode):
     # and submit decays jobs in parallel. `checkpoint_utils` will use
     # `token_budget_id` to load in the correct checkpoint
     base_cfg['token_budget_id'] = budgets_to_decay_at
+    base_cfg['scheduler'] = 'linear_cooldown'
     base_cfg['resume'] = True
     base_cfg['resume_step'] = None
     base_cfg['resume_exp_name'] = f'decay_starts_to_{full_token_budget_id.replace(".", "p")}'

@@ -44,24 +44,26 @@ def create_save_steps(cfg, world_size):
 
     # we want to save the last one because we decay automatically at the end
     if not cfg.resume:
-      points_to_save_at = [cfg.warmup_steps] + points_to_save_at + [cfg.steps_budget]
+      points_to_save_at = [cfg.warmup_steps] + points_to_save_at
       names = ['warmup_done'] + names
 
-    else:  # when we resume, cfg.steps_budget becomes the gap between cfg.resume_step and the step at which we satisfy cfg.token_budget_id
-      points_to_save_at = points_to_save_at + [cfg.steps_budget + cfg.resume_step]
-
+    # when we resume, cfg.steps_budget becomes the gap between cfg.resume_step and the step at which we satisfy cfg.token_budget_id
+    points_to_save_at = points_to_save_at + [cfg.steps_budget]
     names = names + [f'decayed_to_{cfg.token_budget_id.replace(".", "p")}']
 
     tokens_at_points = [t * per_step_tokens for t in points_to_save_at]
-    return {k: v for k, v in zip(points_to_save_at, names)}, [(tok / 1e9) for tok in tokens_at_points]
+    return {int(k): v for k, v in zip(points_to_save_at, names)}, [round(tok / 1e9, 1) for tok in tokens_at_points]
 
   if cfg.resume and cfg.cooldown_only:  # training from resume -> cooldown
     cooldown_steps = (
       cfg.cooldown_steps if isinstance(cfg.cooldown_steps, int) else int(cfg.cooldown_steps * cfg.steps_budget)
     )
-    return {cooldown_steps + cfg.resume_step: f'decayed_to_{cfg.token_budget_id.replace(".", "p")}'}
+    toks = float(cfg.token_budget_id[:-1]) * 1e9
+    return {cooldown_steps + cfg.resume_step: f'decayed_to_{cfg.token_budget_id.replace(".", "p")}'}, [
+      round(tok / 1e9, 1)
+    ]
 
-  return None
+  return None, None
 
 
 def save_checkpoint(step, model, engine, cfg, metrics, name, world_size):
