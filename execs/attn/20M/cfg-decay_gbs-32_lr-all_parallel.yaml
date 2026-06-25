@@ -4,7 +4,7 @@ attn_qk_norm: true
 beta1: 0.9
 beta2: 0.99
 cooldown_only: true
-cooldown_steps: 4000
+cooldown_steps: 0.2
 d_model: 256
 deterministic: false
 dtype: bfloat16
@@ -54,7 +54,7 @@ sampler_seed: null
 save_every_steps: 500
 save_intermediate_checkpoints: true
 save_last_checkpoint: false
-scheduler: wsd
+scheduler: linear_cooldown
 seed: 123
 seq_len: 2048
 steps_budget: -1
@@ -68,7 +68,7 @@ trainset_path: /fast/jsingh/data/nemotron-cc-sample-mtsynth/tokenized_gpt2/ctx_2
 use_wandb: false
 validset_path: /fast/jsingh/data/nemotron-cc-sample-mtsynth/tokenized_gpt2/ctx_2048/valid
 vocab_size: 50304
-wandb_dir: /fast/jsingh/projects/fastlm/june/wandb
+wandb_dir: /fast/jsingh/projects/fastlm/wandb_logs/june/better
 wandb_entity: msc-thesis-jaisidh
 wandb_mode: offline
 wandb_project: hparam-sweep

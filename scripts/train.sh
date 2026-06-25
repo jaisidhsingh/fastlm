@@ -17,7 +17,7 @@ cd /home/jsingh/projects/fastlm
 # nvidia-smi
 
 # Job specific vars
-config='/lustre/home/jsingh/projects/fastlm/execs/attn/20M/tmp.yaml'
+config='/lustre/home/jsingh/projects/fastlm/execs/attn/20M/tmp_decay.yaml'
 
 
 # Make `torch.compile` happy for GDN implementation

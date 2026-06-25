@@ -58,7 +58,7 @@ def create_save_steps(cfg, world_size):
     cooldown_steps = (
       cfg.cooldown_steps if isinstance(cfg.cooldown_steps, int) else int(cfg.cooldown_steps * cfg.steps_budget)
     )
-    toks = float(cfg.token_budget_id[:-1]) * 1e9
+    tok = float(cfg.token_budget_id[:-1]) * 1e9
     return {cooldown_steps + cfg.resume_step: f'decayed_to_{cfg.token_budget_id.replace(".", "p")}'}, [
       round(tok / 1e9, 1)
     ]

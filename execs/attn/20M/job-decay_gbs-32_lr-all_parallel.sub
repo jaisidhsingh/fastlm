@@ -6,6 +6,7 @@ config=/lustre/home/jsingh/projects/fastlm/execs/attn/20M/cfg-decay_gbs-32_lr-al
 
 # Queue as many jobs as points in the hyperaparameter grid
 n_jobs=12
+dp=1
 
 # Pass arguments to the executable
 arguments = $(config) $(Process) $(Cluster)
@@ -18,10 +19,10 @@ output = $(LOGS_DIR)/out/job.$(Cluster).$(Process).out
 log = $(LOGS_DIR)/log/job.$(Cluster).$(Process).log
 
 # Job requirements
-request_memory = 64G
+request_memory = 32G
 request_cpus = 8
 request_gpus = 1
-requirements = (TARGET.CUDADeviceName == "NVIDIA A100-SXM4-80GB" || TARGET.CUDADeviceName == "NVIDIA H100 80GB HBM3")
+requirements = (TARGET.CUDADeviceName == "NVIDIA A100-SXM4-80GB" || TARGET.CUDADeviceName == "NVIDIA H100 80GB HBM3" || TARGET.CUDADeviceName == "NVIDIA H100") && (Machine != "g174.internal.cluster.is.localnet")
 
 queue $(n_jobs)
   

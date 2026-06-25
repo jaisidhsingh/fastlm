@@ -28,3 +28,11 @@ gdn,20M,16,all_parallel,1,yes,no,yes,yes,17368566,6
 gdn,20M,32,all_parallel,1,yes,no,yes,yes,17368567,6
 gdn,50M,16,all_parallel,1,yes,no,yes,yes,17368568,6
 gdn,50M,32,all_parallel,1,yes,no,yes,yes,17368569,6
+attn,20M,16,all_parallel,1,no,yes,yes,yes,17369067,6
+attn,20M,32,all_parallel,1,no,yes,yes,yes,17369068,12
+attn,50M,16,all_parallel,1,no,yes,yes,yes,17369069,6
+attn,50M,32,all_parallel,1,no,yes,yes,yes,17369070,12
+gdn,20M,16,all_parallel,1,no,yes,yes,yes,17369071,6
+gdn,20M,32,all_parallel,1,no,yes,yes,yes,17369072,12
+gdn,50M,16,all_parallel,1,no,yes,yes,yes,17369073,6
+gdn,50M,32,all_parallel,1,no,yes,yes,yes,17369074,12
