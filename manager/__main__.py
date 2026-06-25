@@ -130,7 +130,7 @@ def get_config_content(arch_id, n, gbs, lr, mode):
   return base_cfg
 
 
-def get_jobfile_content(arch_id, n, gbs, lr, n_jobs, mode, cpus=8):
+def get_jobfile_content(arch_id, n, gbs, lr, n_jobs, mode, cpus):
   dp = get_dp_value(n, gbs)
   mem = PARAM_SCALE_ID_TO_MEM_MAP[n]
 
@@ -261,7 +261,7 @@ def train_management(cfg: ManagerConfig):
 
   # then use this config path in the submission file
   jobfile_path = get_jobfile_path(cfg.arch_id, cfg.n, cfg.gbs, lr, cfg.mode)
-  jobfile_content = get_jobfile_content(cfg.arch_id, cfg.n, cfg.gbs, lr, n_jobs, cfg.mode)
+  jobfile_content = get_jobfile_content(cfg.arch_id, cfg.n, cfg.gbs, lr, n_jobs, cfg.mode, cpus=config['num_workers'])
 
   with open(jobfile_path, 'w') as f:
     f.write(jobfile_content)
@@ -275,7 +275,7 @@ def train_management(cfg: ManagerConfig):
     )
     if result.returncode == 0:
       print(result.stdout)
-      cluster_id = result.stdout.split(' cluster ')[-1][:-2]
+      cluster_id = result.stdout.split(' batch job ')[-1]
       cluster_id = int(cluster_id)
 
       # update our file that contains info about what we ran

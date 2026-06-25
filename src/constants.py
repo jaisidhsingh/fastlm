@@ -94,7 +94,7 @@ DEFAULT_CONFIG = {
   'intra_doc_masking': True,
   'sampler': 'sequential',
   'sampler_seed': None,
-  'num_workers': 8,
+  'num_workers': 16,
   'eval': True,
   'validset_path': '/data/horse/ws/jasi149i-fastlm/data/nemotron-cc-sample-mtsynth/tokenized_gpt2/ctx_2048/valid',
   'num_evals': 20,

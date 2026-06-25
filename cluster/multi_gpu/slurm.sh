@@ -5,7 +5,7 @@ source /data/horse/ws/jasi149i-fastlm/envs/pt/bin/activate
 cd /projects/p_neurasearch/fastlm
 
 nvidia-smi
-module load cuda/13
+module load CUDA/13.0.0
 nvcc --version
 
 CONFIG=$1
@@ -13,15 +13,12 @@ SLURM_ARRAY_TASK_ID=$2
 SLURM_JOB_ID=$3
 DP=$4
 
-mp_cache="/data/horse/ws/jasi149i/tmp/mp/${SLURM_JOB_ID}_${SLURM_ARRAY_TASK_ID}"
-wandb_cache="/data/horse/ws/jasi149i/tmp/wandb/${SLURM_JOB_ID}_${SLURM_ARRAY_TASK_ID}"
-triton_cache="/data/horse/ws/jasi149i/tmp/triton/${SLURM_JOB_ID}_${SLURM_ARRAY_TASK_ID}"
-inductor_cache="/data/horse/ws/jasi149i/tmp/inductor/${SLURM_JOB_ID}_${SLURM_ARRAY_TASK_ID}"
+mp_cache="/tmp/mp/${SLURM_JOB_ID}_${SLURM_ARRAY_TASK_ID}"
+wandb_cache="/tmp/wandb/${SLURM_JOB_ID}_${SLURM_ARRAY_TASK_ID}"
+triton_cache="/tmp/triton/${SLURM_JOB_ID}_${SLURM_ARRAY_TASK_ID}"
+inductor_cache="/tmp/inductor/${SLURM_JOB_ID}_${SLURM_ARRAY_TASK_ID}"
 
-mkdir -p "mp/${SLURM_JOB_ID}_${SLURM_ARRAY_TASK_ID}"
-mkdir -p wandb/${SLURM_JOB_ID}_${SLURM_ARRAY_TASK_ID}
-mkdir -p triton/${SLURM_JOB_ID}_${SLURM_ARRAY_TASK_ID}
-mkdir -p inductor/${SLURM_JOB_ID}_${SLURM_ARRAY_TASK_ID}
+mkdir -p $mp_cache $wandb_cache $triton_cache $inductor_cache
 
 export TMPDIR=$mp_cache
 export WANDB_CACHE_DIR=$wandb_cache
@@ -33,4 +30,6 @@ cd /projects/p_neurasearch/fastlm
 torchrun --nproc_per_node=$DP -m experiments.train \
   --config=$CONFIG \
   --job_idx=$SLURM_ARRAY_TASK_ID \
-  --job_cluster=$SLURM_JOB_ID;
+  --job_cluster=$SLURM_JOB_ID
+
+rm -rf $mp_cache $wandb_cache $triton_cache $inductor_cache

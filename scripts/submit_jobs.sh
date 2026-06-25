@@ -3,11 +3,11 @@
 cd /projects/p_neurasearch/fastlm
 
 arch_id=("attn")
-n=("50M")
+n=("20M")
 gbs=(64)
 lr="all_parallel"
 mode="main"
-submit="no"
+submit="yes"
 routine="train"
 
 for aid in "${arch_id[@]}"; do
