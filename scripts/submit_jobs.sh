@@ -3,10 +3,10 @@
 cd /home/jsingh/projects/fastlm
 
 arch_id=("attn" "gdn")
-n=("20M" "50M")
+n=("150M" "300M")
 gbs=(16 32)
 lr="all_parallel"
-mode="decay"
+mode="main"
 bid=100
 submit="yes"
 routine="train"
