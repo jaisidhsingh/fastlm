@@ -2,9 +2,9 @@
 #SBATCH --job-name=fastlm
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=8
+#SBATCH --cpus-per-task=16
 #SBATCH --mem=64G
-#SBATCH --gres=gpu:2
+#SBATCH --gres=gpu:1
 #SBATCH --time=24:00:00
 #SBATCH --account=p_neurasearch
 #SBATCH --job-name=attn-main_n-50M_gbs-64_lr-all_parallel
@@ -13,7 +13,7 @@
 #SBATCH --array=0-5
 
 CONFIG=/projects/p_neurasearch/fastlm/execs/attn/50M/cfg-main_gbs-64_lr-all_parallel.yaml
-DP=2
+DP=1
 HOST=$(hostname -f)
 
 cd /projects/p_neurasearch/fastlm

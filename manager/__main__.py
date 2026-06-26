@@ -46,7 +46,7 @@ def get_dp_value(n, gbs):
     return 1
   elif gbs in [64, 128]:
     if n in ['20M', '50M']:
-      return 2
+      return 1
     else:  # n in ["150M", "300M"]
       return 4
   else:  # gbs in [256, 512]
