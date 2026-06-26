@@ -100,7 +100,7 @@ def get_config_content(arch_id, n, gbs, lr, mode):
   base_cfg['save_intermediate_checkpoints'] = True
 
   # wandb
-  base_cfg['use_wandb'] = True
+  base_cfg['use_wandb'] = False
   base_cfg['wandb_mode'] = 'offline'
   base_cfg['wandb_run_name'] = f'{arch_id}-{n}_gbs-{gbs}'
   base_cfg['exp_name'] = f'{arch_id}-{n}_gbs-{gbs}'
@@ -238,6 +238,11 @@ def train_management(cfg: ManagerConfig):
   if isinstance(cfg.lr, str):
     if cfg.lr == 'all_parallel':
       lr = SCALING_LADDER['learning_rates']
+    elif ',' in cfg.lr:
+      lr = []
+      for x in cfg.lr.split(','):
+        if len(x) > 0:
+          lr.append(float(x))
     else:
       raise NotImplementedError('No other string options supported for `cfg.lr`')
   else:

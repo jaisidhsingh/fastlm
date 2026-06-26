@@ -28,7 +28,7 @@ def parse_arch_id(arch_id: str) -> tp.Tuple[str, int]:
   # for example:
   #   pure attention: arch_id = "attn"
   #   pure gdn: arch_id = "gdn"
-  #   hybrid with gdn:attn = r:1 : arch_id = "hybrid_r-1"
+  #   hybrid with gdn:attn = r:1 : arch_id = "gdn+attn_r-1"
   split_id = arch_id.split('_')
   arch = split_id[0]
   ratio = 1
