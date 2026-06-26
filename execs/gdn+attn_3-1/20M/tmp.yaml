@@ -23,8 +23,7 @@ hybrid_mixer_ratio: 3
 intra_doc_masking: true
 layer_norm_scaling: false
 log_every_steps: 1
-lr:
-  - 0.001
+lr: 0.001
 lr_end: 1.0e-05
 lr_end_pct: null
 lr_start: 0.0

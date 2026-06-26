@@ -2,11 +2,11 @@
 
 cd /projects/p_neurasearch/fastlm
 
-arch_id=("gdn+attn_3-1")
+arch_id=("attn" "gdn")
 n=("20M" "50M")
-gbs=(16 32)
+gbs=(64)
 lr="all_parallel"
-mode="main"
+mode="decay"
 submit="yes"
 routine="train"
 
