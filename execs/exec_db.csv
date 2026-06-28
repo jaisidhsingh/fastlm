@@ -7,3 +7,7 @@ attn,20M,64,all_parallel,1,no,yes,yes,yes,3689360,24
 attn,50M,64,all_parallel,1,no,yes,yes,yes,3689361,24
 gdn,20M,64,all_parallel,1,no,yes,yes,yes,3689362,24
 gdn,50M,64,all_parallel,1,no,yes,yes,yes,3689383,24
+gdn+attn_3-1,150M,16,all_parallel,1,yes,no,yes,yes,3692154,6
+gdn+attn_3-1,150M,32,all_parallel,1,yes,no,yes,yes,3692155,6
+gdn+attn_3-1,300M,16,all_parallel,1,yes,no,yes,yes,3692156,6
+gdn+attn_3-1,300M,32,all_parallel,1,yes,no,yes,yes,3692157,6
