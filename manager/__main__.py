@@ -12,8 +12,8 @@ from src.constants import DEFAULT_CONFIG, SCALING_LADDER
 
 LR_FLOAT_TO_STR_MAP = {0.00025: '25e-5', 0.0005: '5e-4', 0.001: '1e-3', 0.002: '2e-3', 0.004: '4e-3', 0.008: '8e-3'}
 PARAM_SCALE_ID_TO_MEM_MAP = {'20M': 32, '50M': 64, '150M': 72, '300M': 96}
-DB_PATH = '/projects/p_neurasearch/fastlm/execs/exec_db.csv'
-FOLDER = '/projects/p_neurasearch/fastlm/execs'
+DB_PATH = '/projects/p_neurasearch/alphafastlm/execs/exec_db.csv'
+FOLDER = '/projects/p_neurasearch/alphafastlm/execs'
 
 
 def parse_arch_id(arch_id: str) -> tp.Tuple[str, int]:
@@ -46,7 +46,7 @@ def get_dp_value(n, gbs):
     return 1
   elif gbs in [64, 128]:
     if n in ['20M', '50M']:
-      return 1
+      return 2
     else:  # n in ["150M", "300M"]
       return 4
   else:  # gbs in [256, 512]
@@ -58,12 +58,12 @@ def get_dp_value(n, gbs):
 
 def get_config_path(arch_id, n, gbs, lr, mode):
   lr_ext = 'all_parallel' if isinstance(lr, list) else LR_FLOAT_TO_STR_MAP[lr]
-  return f'/projects/p_neurasearch/fastlm/execs/{arch_id}/{n}/cfg-{mode}_gbs-{gbs}_lr-{lr_ext}.yaml'
+  return f'/projects/p_neurasearch/alphafastlm/execs/{arch_id}/{n}/cfg-{mode}_gbs-{gbs}_lr-{lr_ext}.yaml'
 
 
 def get_jobfile_path(arch_id, n, gbs, lr, mode):
   lr_ext = 'all_parallel' if isinstance(lr, list) else LR_FLOAT_TO_STR_MAP[lr]
-  return f'/projects/p_neurasearch/fastlm/execs/{arch_id}/{n}/job-{mode}_gbs-{gbs}_lr-{lr_ext}.sh'
+  return f'/projects/p_neurasearch/alphafastlm/execs/{arch_id}/{n}/job-{mode}_gbs-{gbs}_lr-{lr_ext}.sh'
 
 
 def get_config_content(arch_id, n, gbs, lr, mode):
@@ -148,7 +148,7 @@ def get_jobfile_content(arch_id, n, gbs, lr, n_jobs, mode, cpus):
   name = f'{arch_id}-{mode}_n-{n}_gbs-{gbs}_lr-{lr_ext}'
 
   return f"""#!/bin/bash
-#SBATCH --job-name=fastlm
+#SBATCH --job-name=alphafastlm
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task={cpus}
@@ -160,17 +160,18 @@ def get_jobfile_content(arch_id, n, gbs, lr, n_jobs, mode, cpus):
 #SBATCH --output=/data/horse/ws/jasi149i-fastlm/logs/june/out/job-%A_%a.out
 #SBATCH --error=/data/horse/ws/jasi149i-fastlm/logs/june/err/job-%A_%a.err
 #SBATCH --array=0-{n_jobs - 1}
+#SBATCH --exclude=i8009
 
 CONFIG={config}
 DP={dp}
 HOST=$(hostname -f)
 
-cd /projects/p_neurasearch/fastlm
+cd /projects/p_neurasearch/alphafastlm
 
 if [ "$DP" -eq 1 ]; then
     bash cluster/single_gpu/slurm.sh "$CONFIG" "$SLURM_ARRAY_TASK_ID" "$SLURM_JOB_ID"
 else
-  if [ "$HOST" == *capella* && "$DP" -eq 8]; then
+  if [ "$HOST" == *alpha* && "$DP" -eq 16]; then
     bash cluster/multi_gpu/multinode_slurm.sh "$CONFIG" "$SLURM_ARRAY_TASK_ID" "$SLURM_JOB_ID" "$DP"
   else
     bash cluster/multi_gpu/slurm.sh "$CONFIG" "$SLURM_ARRAY_TASK_ID" "$SLURM_JOB_ID" "$DP"
@@ -197,10 +198,10 @@ def sanity_check():
 
   refs = {
     'main': lambda x: (
-      '/lustre/home/jsingh/projects/fastlm/june_exec/N-20M,50M_gbs-16,32/cfg_20M_gbs-32_all-lr_parallel.yaml'
+      '/lustre/home/jsingh/projects/alphafastlm/june_exec/N-20M,50M_gbs-16,32/cfg_20M_gbs-32_all-lr_parallel.yaml'
     ),
     'decay': lambda x: (
-      f'/lustre/home/jsingh/projects/fastlm/june_exec/decay_intermediates/cfg_20M_gbs-32_tb-{x.replace(".", "p")}.yaml'
+      f'/lustre/home/jsingh/projects/alphafastlm/june_exec/decay_intermediates/cfg_20M_gbs-32_tb-{x.replace(".", "p")}.yaml'
     ),
   }
 

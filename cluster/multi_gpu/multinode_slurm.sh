@@ -2,7 +2,7 @@
 
 source /home/jasi149i/.bashrc
 source /data/horse/ws/jasi149i-hybridlms/envs/pt/bin/activate
-cd /projects/p_neurasearch/fastlm
+cd /projects/p_neurasearch/alphafastlm
 
 nvidia-smi
 module load cuda/13
@@ -32,7 +32,7 @@ export TRITON_CACHE_DIR=$triton_cache
 export TORCHINDUCTOR_CACHE_DIR=$inductor_cache
 
 # Execute python script
-cd /projects/p_neurasearch/fastlm
+cd /projects/p_neurasearch/alphafastlm
 srun torchrun \
     --nnodes=$SLURM_NNODES \
     --nproc_per_node=4 \

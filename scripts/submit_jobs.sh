@@ -1,12 +1,12 @@
 #!/bin/bash
 
-cd /projects/p_neurasearch/fastlm
+cd /projects/p_neurasearch/alphafastlm
 
-arch_id=("gdn+attn_3-1")
+arch_id=("gdn")
 n=("150M" "300M")
-gbs=(16 32)
+gbs=(64)
 lr="all_parallel"
-mode="decay"
+mode="main"
 submit="yes"
 routine="train"
 

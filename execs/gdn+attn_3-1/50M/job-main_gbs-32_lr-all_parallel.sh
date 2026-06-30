@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=fastlm
+#SBATCH --job-name=alphafastlm
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=16
@@ -12,11 +12,11 @@
 #SBATCH --error=/data/horse/ws/jasi149i-fastlm/logs/june/err/job-%A_%a.err
 #SBATCH --array=0-5
 
-CONFIG=/projects/p_neurasearch/fastlm/execs/gdn+attn_3-1/50M/cfg-main_gbs-32_lr-all_parallel.yaml
+CONFIG=/projects/p_neurasearch/alphafastlm/execs/gdn+attn_3-1/50M/cfg-main_gbs-32_lr-all_parallel.yaml
 DP=1
 HOST=$(hostname -f)
 
-cd /projects/p_neurasearch/fastlm
+cd /projects/p_neurasearch/alphafastlm
 
 if [ "$DP" -eq 1 ]; then
     bash cluster/single_gpu/slurm.sh "$CONFIG" "$SLURM_ARRAY_TASK_ID" "$SLURM_JOB_ID"

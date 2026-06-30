@@ -2,7 +2,7 @@
 
 source /home/jasi149i/.bashrc
 source /data/horse/ws/jasi149i-fastlm/envs/pt/bin/activate
-cd /projects/p_neurasearch/fastlm
+cd /projects/p_neurasearch/alphafastlm
 
 nvidia-smi
 module load CUDA/13.0.0
@@ -26,7 +26,7 @@ export TRITON_CACHE_DIR=$triton_cache
 export TORCHINDUCTOR_CACHE_DIR=$inductor_cache
 
 # Execute python script
-cd /projects/p_neurasearch/fastlm
+cd /projects/p_neurasearch/alphafastlm
 torchrun --nproc_per_node=$DP -m experiments.train \
   --config=$CONFIG \
   --job_idx=$SLURM_ARRAY_TASK_ID \
