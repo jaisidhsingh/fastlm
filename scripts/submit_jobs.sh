@@ -6,7 +6,7 @@ arch_id=("gdn")
 n=("150M" "300M")
 gbs=(64)
 lr="all_parallel"
-mode="main"
+mode="decay"
 submit="yes"
 routine="train"
 
