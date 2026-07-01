@@ -2,11 +2,11 @@
 
 cd /home/jsingh/projects/fastlm
 
-arch_id=("attn" "gdn")
-n=("150M" "300M")
-gbs=(16 32)
+arch_id=("attn")
+n=("150M")
+gbs=(64)
 lr="all_parallel"
-mode="decay"
+mode="main"
 bid=100
 submit="yes"
 routine="train"

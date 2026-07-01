@@ -229,6 +229,11 @@ def train_management(cfg: ManagerConfig):
   if isinstance(cfg.lr, str):
     if cfg.lr == 'all_parallel':
       lr = SCALING_LADDER['learning_rates']
+    elif "," in cfg.lr:
+      lr = []
+      for x in cfg.lr.split(","):
+          if len(x) > 0:
+            lr.append(float(x))
     else:
       raise NotImplementedError('No other string options supported for `cfg.lr`')
   else:
