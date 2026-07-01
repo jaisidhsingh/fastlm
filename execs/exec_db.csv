@@ -34,3 +34,4 @@ gdn,300M,32,all_parallel,1,no,yes,yes,yes,17370923,12
 attn,150M,64,all_parallel,4,yes,no,yes,yes,17372588,1
 attn,150M,64,all_parallel,4,yes,no,yes,yes,17372614,1
 attn,150M,64,all_parallel,4,yes,no,yes,yes,17372669,6
+attn,150M,64,all_parallel,4,no,yes,yes,yes,17378424,24
