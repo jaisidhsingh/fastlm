@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from transformers import PretrainedConfig, PreTrainedModel
+from transformers import GenerationMixin, PretrainedConfig, PreTrainedModel
 from transformers.modeling_outputs import (
   CausalLMOutputWithPast,
 )
@@ -11,7 +11,7 @@ from src.models.transformer import ModelConfig, Transformer
 
 
 class HFModelConfig(PretrainedConfig):
-  model_type = 'hybrid_transformer'
+  model_type = 'hybridlm_hf'
 
   def __init__(
     self,
@@ -88,7 +88,7 @@ def hf_to_internal_config(cfg: HFModelConfig):
   )
 
 
-class HFModelForCausalLM(PreTrainedModel):
+class HFModelForCausalLM(PreTrainedModel, GenerationMixin):
   config_class = HFModelConfig
   base_model_prefix = 'model'
 
