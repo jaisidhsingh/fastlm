@@ -33,11 +33,9 @@ def construct_model_config(cfg):
     return model_cfg
 
 
-"""
 def construct_hf_config(cfg):
   model_cfg = construct_model_config(cfg)
   return HFModelConfig(**vars(model_cfg))
-"""
 
 
 def construct_model(cfg):

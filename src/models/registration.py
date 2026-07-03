@@ -1,4 +1,3 @@
-"""
 from transformers import AutoConfig, AutoModelForCausalLM
 
 from src.models.to_hf import HybridTransformerConfig, HybridTransformerForCausalLM
@@ -12,4 +11,3 @@ AutoModelForCausalLM.register(
   HFModelConfig,
   HFModelForCausalLM,
 )
-"""
