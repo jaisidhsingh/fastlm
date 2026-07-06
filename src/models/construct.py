@@ -29,6 +29,7 @@ def construct_model_config(cfg):
       gdn_gate=cfg.gdn_gate,
       gdn_neg_eigval=cfg.gdn_neg_eigval,
       intra_doc=cfg.intra_doc_masking,
+      use_flex_attention=getattr(cfg, 'use_flex_attention', False),
     )
     return model_cfg
 
@@ -65,6 +66,7 @@ def construct_model(cfg):
       gdn_gate=cfg.gdn_gate,
       gdn_neg_eigval=cfg.gdn_neg_eigval,
       intra_doc=cfg.intra_doc_masking,
+      use_flex_attention=getattr(cfg, 'use_flex_attention', False),
     )
     model = Transformer(model_cfg)
 

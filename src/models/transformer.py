@@ -38,6 +38,7 @@ class ModelConfig:
   gdn_neg_eigval: bool = True
 
   intra_doc: bool = False
+  use_flex_attention: bool = False
 
 
 MLP_CLASSES = {'mlp': MLP, 'glu': GLU, 'mlp_relu_sq': MLPReluSquared}

@@ -11,8 +11,58 @@ from src.models import get_param_groups
 from src.optim import initialize_scheduler, intialize_optimizer
 from src.optim.lr_schedule import LinearCooldown
 
+try:
+  from torch.nn.attention.flex_attention import create_block_mask, BlockMask
+  _FLEX_ATTENTION_AVAILABLE = True
+except ImportError:
+  _FLEX_ATTENTION_AVAILABLE = False
 
-def _move_to_device(batch, seq_len, device, intra_doc_masking):
+
+def _build_flex_block_mask(docs_lengths_batch, seq_len, device):
+  """Build a BlockMask for intra-document causal attention using flex_attention.
+
+  Creates a compiled block-diagonal causal mask from document boundaries.
+  This is functionally identical to the dense mask from intra_doc_causal_mask,
+  but uses flex_attention's block-sparse representation for FlashAttention compatibility.
+
+  Args:
+    docs_lengths_batch: list of lists of document lengths per example.
+      Each inner list contains the token counts for each document in that example.
+      Lengths sum to seq_len + 1 (extra token for target shift).
+    seq_len: sequence length (mask will be seq_len × seq_len).
+    device: torch device to create the mask on.
+
+  Returns:
+    BlockMask object for use with flex_attention.
+  """
+  bsz = len(docs_lengths_batch)
+
+  # Build document ID tensor: (bsz, seq_len)
+  # Each position maps to the index of the document it belongs to.
+  doc_ids = torch.zeros(bsz, seq_len, dtype=torch.int32, device=device)
+  for b in range(bsz):
+    pos = 0
+    for doc_id, length in enumerate(docs_lengths_batch[b]):
+      end = min(pos + length, seq_len)
+      if pos >= seq_len:
+        break
+      doc_ids[b, pos:end] = doc_id
+      pos += length
+
+  # Mask function: causal AND same-document
+  # This gets compiled by create_block_mask into an efficient block-sparse representation
+  def intra_doc_causal_mask_fn(b, h, q_idx, kv_idx):
+    causal = q_idx >= kv_idx
+    same_doc = doc_ids[b, q_idx] == doc_ids[b, kv_idx]
+    return causal & same_doc
+
+  block_mask = create_block_mask(
+    intra_doc_causal_mask_fn, B=bsz, H=None, Q_LEN=seq_len, KV_LEN=seq_len, device=device
+  )
+  return block_mask
+
+
+def _move_to_device(batch, seq_len, device, intra_doc_masking, use_flex_attention=False):
   """Slice batch to get inputs and targets, and move them to device."""
   bsz = batch['input_ids'].shape[0]
 
@@ -24,11 +74,18 @@ def _move_to_device(batch, seq_len, device, intra_doc_masking):
   #   targets = batch['input_ids'][:, 1 : (seq_len + 1)]
 
   if intra_doc_masking:
-    # build one mask per example and stack into (bsz, L, L)
-    masks = [intra_doc_causal_mask(doc_lengths, seq_len + 1, device) for doc_lengths in batch['docs_lengths']]
-    attn_mask = torch.stack(masks, dim=0)  # (bsz, L+1, L+1)
-    attn_mask = attn_mask[:, :seq_len, :seq_len].contiguous()  # (bsz, L, L)
+    # === Attention mask for softmax attention ===
+    if use_flex_attention:
+      # Build a compiled block-diagonal causal mask via flex_attention.
+      # This is functionally identical to the dense mask below but FlashAttention-compatible.
+      attn_mask = _build_flex_block_mask(batch['docs_lengths'], seq_len, device)
+    else:
+      # build one mask per example and stack into (bsz, L, L)
+      masks = [intra_doc_causal_mask(doc_lengths, seq_len + 1, device) for doc_lengths in batch['docs_lengths']]
+      attn_mask = torch.stack(masks, dim=0)  # (bsz, L+1, L+1)
+      attn_mask = attn_mask[:, :seq_len, :seq_len].contiguous()  # (bsz, L, L)
 
+    # === Linear attention mask and cu_seqlens (for GatedDeltaNet, always needed in hybrid models) ===
     # masking and cu_seqlens for linear attention
     linear_mask_info = [
       intra_doc_masking_linear(doc_lengths, seq_len + 1, device) for doc_lengths in batch['docs_lengths']
@@ -52,7 +109,11 @@ def _move_to_device(batch, seq_len, device, intra_doc_masking):
     assert cu_seqlens.argmax() == cu_seqlens.shape[0] - 1, cu_seqlens
 
   else:
-    attn_mask = torch.tril(torch.ones(seq_len, seq_len)).repeat(batch['input_ids'].shape[0], 1, 1).to(dtype=torch.bool)
+    if use_flex_attention:
+      # No mask needed: GatedAttention will use F.sdpa with is_causal=True (enables FlashAttention)
+      attn_mask = None
+    else:
+      attn_mask = torch.tril(torch.ones(seq_len, seq_len)).repeat(batch['input_ids'].shape[0], 1, 1).to(dtype=torch.bool)
     linear_masks = torch.ones((bsz, seq_len), dtype=torch.bool, device=device)
     cu_seqlens = None
 
@@ -62,7 +123,10 @@ def _move_to_device(batch, seq_len, device, intra_doc_masking):
     targets = targets.pin_memory().to(device, non_blocking=True)
   else:
     inputs, targets = inputs.to(device), targets.to(device)
-  attn_mask = attn_mask.to(device=device)
+
+  # Only move dense tensor masks to device; BlockMask is already on the correct device
+  if attn_mask is not None and isinstance(attn_mask, torch.Tensor):
+    attn_mask = attn_mask.to(device=device)
 
   return inputs, targets, attn_mask, linear_masks, cu_seqlens
 
@@ -84,6 +148,10 @@ class TorchEngine(torch.nn.Module):
     self.grad_clip = cfg.grad_clip
     self.dtype = cfg.dtype
     self.intra_doc_masking = getattr(cfg, 'intra_doc_masking', False)
+    self.use_flex_attention = getattr(cfg, 'use_flex_attention', False)
+
+    if self.use_flex_attention and not _FLEX_ATTENTION_AVAILABLE:
+      raise ImportError('use_flex_attention=True requires PyTorch >= 2.5. Update PyTorch or set use_flex_attention=False.')
 
     self.device = device
 
@@ -147,7 +215,7 @@ class TorchEngine(torch.nn.Module):
     self.accumulated_samples += 1
 
     inputs, targets, attn_mask, linear_mask, cu_seqlens = _move_to_device(
-      batch, self.seq_len, self.device, self.intra_doc_masking
+      batch, self.seq_len, self.device, self.intra_doc_masking, self.use_flex_attention
     )
 
     # sync (reduce) gradients at the last accumulation step
@@ -203,7 +271,7 @@ class TorchEngine(torch.nn.Module):
     num_batches = 0
     for batch in dataloader:
       inputs, targets, attn_mask, linear_mask, cu_seqlens = _move_to_device(
-        batch, self.seq_len, self.device, self.intra_doc_masking
+        batch, self.seq_len, self.device, self.intra_doc_masking, self.use_flex_attention
       )
       with self.ctx:
         output = self.model(inputs, attn_mask, linear_mask, cu_seqlens)

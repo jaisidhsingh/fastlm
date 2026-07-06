@@ -32,6 +32,7 @@ n_heads: 4
 rms_norm: True
 tie_embeddings: True
 torch_compile: True
+use_flex_attention: False
 token_mixer: "attn"
 hybrid_mixer_ratio: 1
 layer_norm_scaling: False

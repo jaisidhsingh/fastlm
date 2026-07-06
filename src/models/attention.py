@@ -9,6 +9,12 @@ from torch import nn
 from src.models.components import RMSNorm
 from src.models.embeddings import apply_rotary_emb_complex_like
 
+try:
+  from torch.nn.attention.flex_attention import BlockMask, flex_attention
+  _FLEX_ATTENTION_AVAILABLE = True
+except ImportError:
+  _FLEX_ATTENTION_AVAILABLE = False
+
 
 class GatedAttention(nn.Module):
   def __init__(self, cfg):
@@ -22,6 +28,10 @@ class GatedAttention(nn.Module):
 
     self.use_gate = cfg.attn_gate
     self.qk_norm = cfg.attn_qk_norm
+    self.use_flex_attention = getattr(cfg, 'use_flex_attention', False)
+
+    if self.use_flex_attention and not _FLEX_ATTENTION_AVAILABLE:
+      raise ImportError('use_flex_attention=True requires PyTorch >= 2.5. Update PyTorch or set use_flex_attention=False.')
 
     if self.use_gate:
       self.w_gate = nn.Linear(cfg.dim, cfg.dim, bias=False)
@@ -48,7 +58,10 @@ class GatedAttention(nn.Module):
     k = k.transpose(1, 2)  # (bsz, nh, seqlen, h_dim)
     v = v.transpose(1, 2)  # (bsz, nh, seqlen, h_dim)
 
-    if attention_mask is not None:
+    if self.use_flex_attention and isinstance(attention_mask, BlockMask):
+      # flex_attention with compiled block-diagonal causal mask (FlashAttention-compatible)
+      out = flex_attention(q, k, v, block_mask=attention_mask)  # (bsz, nh, seqlen, h_dim)
+    elif attention_mask is not None:
       # attn_mask has shape (bsz, seqlen, seqlen)
       # from (bsz, L, L) to (bsz, 1, L, L) so it broadcasts over heads
       attention_mask = attention_mask.unsqueeze(1)
