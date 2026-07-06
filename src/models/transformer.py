@@ -23,6 +23,7 @@ class ModelConfig:
   mlp: str = 'mlp'
   rmsnorm_eps: float = 1e-6
   tie_embeddings: bool = False
+  model_dtype: str = 'bfloat16'
 
   # if there is not `+` symbol in the string below, the model is instantiated as a pure (non-hybrid) model
   token_mixer: str = 'gdn+attn'

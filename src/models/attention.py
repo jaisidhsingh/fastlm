@@ -5,12 +5,14 @@ from dataclasses import dataclass
 import torch
 import torch.nn.functional as F
 from torch import nn
+from torch.nn.attention import SDPBackend, sdpa_kernel
 
 from src.models.components import RMSNorm
 from src.models.embeddings import apply_rotary_emb_complex_like
 
 try:
   from torch.nn.attention.flex_attention import BlockMask, flex_attention
+
   _FLEX_ATTENTION_AVAILABLE = True
 except ImportError:
   _FLEX_ATTENTION_AVAILABLE = False
@@ -22,6 +24,7 @@ class GatedAttention(nn.Module):
     assert cfg.dim % cfg.n_heads == 0
     self.n_heads = cfg.n_heads
     self.head_dim = cfg.dim // cfg.n_heads
+    self.dtype = torch.bfloat16 if cfg.model_dtype == 'bfloat16' else torch.float32
 
     self.w_qkv = nn.Linear(cfg.dim, 3 * cfg.dim, bias=False)
     self.w_out = nn.Linear(cfg.dim, cfg.dim, bias=False)
@@ -30,8 +33,12 @@ class GatedAttention(nn.Module):
     self.qk_norm = cfg.attn_qk_norm
     self.use_flex_attention = getattr(cfg, 'use_flex_attention', False)
 
-    if self.use_flex_attention and not _FLEX_ATTENTION_AVAILABLE:
-      raise ImportError('use_flex_attention=True requires PyTorch >= 2.5. Update PyTorch or set use_flex_attention=False.')
+    if self.use_flex_attention:
+      if not _FLEX_ATTENTION_AVAILABLE:
+        raise ImportError(
+          'use_flex_attention=True requires PyTorch >= 2.5. Update PyTorch or set use_flex_attention=False.'
+        )
+      self._compiled_flex_attention = torch.compile(flex_attention)
 
     if self.use_gate:
       self.w_gate = nn.Linear(cfg.dim, cfg.dim, bias=False)
@@ -53,22 +60,26 @@ class GatedAttention(nn.Module):
 
     if freqs_cis is not None:
       q, k = apply_rotary_emb_complex_like(q, k, freqs_cis=freqs_cis)  # (bsz, seqlen, nh, h_dim)
+      q = q.to(dtype=v.dtype)
+      k = k.to(dtype=v.dtype)
 
     q = q.transpose(1, 2)  # (bsz, nh, seqlen, h_dim)
     k = k.transpose(1, 2)  # (bsz, nh, seqlen, h_dim)
     v = v.transpose(1, 2)  # (bsz, nh, seqlen, h_dim)
 
+    # different attention-implementations for different setups
     if self.use_flex_attention and isinstance(attention_mask, BlockMask):
-      # flex_attention with compiled block-diagonal causal mask (FlashAttention-compatible)
-      out = flex_attention(q, k, v, block_mask=attention_mask)  # (bsz, nh, seqlen, h_dim)
+      out = self._compiled_flex_attention(q, k, v, block_mask=attention_mask)  # (bsz, nh, seqlen, h_dim)
+
     elif attention_mask is not None:
       # attn_mask has shape (bsz, seqlen, seqlen)
       # from (bsz, L, L) to (bsz, 1, L, L) so it broadcasts over heads
       attention_mask = attention_mask.unsqueeze(1)
-
       out = F.scaled_dot_product_attention(q, k, v, attn_mask=attention_mask)  # (bsz, nh, seqlen, h_dim)
+
     else:
-      out = F.scaled_dot_product_attention(q, k, v, is_causal=True)  # (bsz, nh, seqlen, h_dim)
+      with sdpa_kernel(SDPBackend.FLASH_ATTENTION):
+        out = F.scaled_dot_product_attention(q, k, v, is_causal=True)  # (bsz, nh, seqlen, h_dim)
 
     out = out.transpose(1, 2).contiguous().view(bsz, seqlen, d)  # (bsz, seqlen, d)
 

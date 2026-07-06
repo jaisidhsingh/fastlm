@@ -57,11 +57,13 @@ def _build_flex_block_mask(docs_lengths_batch, seq_len, device):
     same_doc = doc_ids[b, q_idx] == doc_ids[b, kv_idx]
     return causal & same_doc
 
-  block_mask = create_block_mask(intra_doc_causal_mask_fn, B=bsz, H=None, Q_LEN=seq_len, KV_LEN=seq_len, device=device)
+  block_mask = create_block_mask(
+    intra_doc_causal_mask_fn, B=bsz, H=None, Q_LEN=seq_len, KV_LEN=seq_len, device=device, _compile=True
+  )
   return block_mask
 
 
-def _move_to_device(batch, seq_len, device, intra_doc_masking, use_flex_attention=False):
+def _move_to_device(batch, seq_len, device, intra_doc_masking, use_flex_attention=True):
   """Slice batch to get inputs and targets, and move them to device."""
   bsz = batch['input_ids'].shape[0]
 
@@ -149,7 +151,7 @@ class TorchEngine(torch.nn.Module):
     self.grad_clip = cfg.grad_clip
     self.dtype = cfg.dtype
     self.intra_doc_masking = getattr(cfg, 'intra_doc_masking', False)
-    self.use_flex_attention = getattr(cfg, 'use_flex_attention', False)
+    self.use_flex_attention = getattr(cfg, 'use_flex_attention', True)
 
     if self.use_flex_attention and not _FLEX_ATTENTION_AVAILABLE:
       raise ImportError(

@@ -1,18 +1,23 @@
 import time
 from collections import defaultdict
-from contextlib import suppress
+from contextlib import nullcontext, suppress
 
 import torch
 from absl import app, flags
 from torch.utils.flop_counter import FlopCounterMode
 
 from src import utils
-from src.checkpoint_utils import create_save_steps, load_metrics_from_checkpoint, maybe_load_checkpoint, save_checkpoint
-from src.data import get_dataloaders
 from src.engine import TorchEngine
 from src.models import construct_model
-from src.torch_utils import destroy_ddp, pytorch_setup
-from src.utils import print_master
+from src.utils.base_utils import print_master
+from src.utils.checkpoint_utils import (
+  create_save_steps,
+  load_metrics_from_checkpoint,
+  maybe_load_checkpoint,
+  save_checkpoint,
+)
+from src.utils.throughput_utils import ThroughputMeasurement
+from src.utils.torch_utils import destroy_ddp, pytorch_setup
 
 flags.DEFINE_string('config', 'src/config/cfg_test.yaml', 'Path to config.yaml file.')
 flags.DEFINE_integer('job_idx', None, 'Job idx for job-array sweeps. From 0 to n-1.')
@@ -77,21 +82,8 @@ def main(argv):
   # It DOES NOT skip over that many batches in the dataloader.
   step_start = 0
   micro_step_start = step_start * cfg.grad_accumulation_steps
-  print_master(
-    f'=== Start Training from step: {step_start}/{steps_budget}, micro_step: {micro_step_start}/{micro_step_budget} ==='
-  )
 
-  # Bookkeeping
-  metrics = defaultdict(list)
-  if ckpt is not None:
-    metrics = defaultdict(list, load_metrics_from_checkpoint(cfg, world_size))
-
-  train_loss_array = []
-
-  # Bookkeeping for throughput
-  flops_per_micro_step = 0
-  step_time = 0
-
+  # Setup for resuming
   resume_step = None
   if ckpt is not None:
     resume_step = ckpt['step']
@@ -100,7 +92,6 @@ def main(argv):
     print_master(f'Resuming state from step={resume_step}, cooldown only={cfg.cooldown_only}')
 
   # When do we want to save
-  # exp_folder = utils.get_exp_dir_path(cfg, world_size)
   save_points, save_toks = create_save_steps(cfg, world_size)
   assert save_points is not None and save_toks is not None, (
     "Save tracking is incorrect, & this is a problem even if we're not saving anything."
@@ -110,46 +101,37 @@ def main(argv):
     print(f'Step point: {k}, save name: {v}')
   print('Saving at token points', save_toks)
 
+  # Bookkeeping
+  metrics = defaultdict(list)
+  if ckpt is not None:
+    metrics = defaultdict(list, load_metrics_from_checkpoint(cfg, world_size))
+
+  train_loss_array = []
+  throughput_ctx = ThroughputMeasurement(cfg, engine.model) if cfg.measure_throughput else nullcontext()
+
   # Training
   for micro_step, micro_batch in enumerate(trainloader, micro_step_start + 1):
     step = micro_step // cfg.grad_accumulation_steps
     is_step = micro_step % cfg.grad_accumulation_steps == 0
 
+    # Sampler is sequential, so find new data.
     if resume_step is not None:
       if step <= resume_step:
         continue
       else:
         if not reached_new_data:
-          # steps_budget += resume_step
           reached_new_data = True
 
+    # Stop-training boundary
     if step > steps_budget and is_step:
       break
 
-    # count FLOPs used
-    if micro_step == 1 and cfg.measure_throughput:
-      flop_counter = FlopCounterMode(model, display=False, depth=2)
-    else:
-      flop_counter = suppress()
-
-    if cfg.measure_throughput:
-      torch.cuda.synchronize()
-      start = time.perf_counter()
-
-    # Train
-    with flop_counter:
+    # Train a step
+    with throughput_ctx:
       train_loss = engine.step(micro_batch)
-    if micro_step == 1 and cfg.measure_throughput:
-      flops_per_micro_step = flop_counter.get_total_flops()
     train_loss_array.append(train_loss)
 
-    if cfg.measure_throughput:
-      torch.cuda.synchronize()
-      end = time.perf_counter()
-      micro_step_time = end - start
-      step_time += micro_step_time
-
-    # Eval
+    # Validation loop
     valid_loss = None
     if cfg.eval and is_step:
       if step % cfg.eval_every_steps == 0 or step == steps_budget:  # last step
@@ -158,10 +140,7 @@ def main(argv):
 
     # Log
     if master_process and step % cfg.log_every_steps == 0 and is_step:
-      throughput_metrics = None
-      if cfg.measure_throughput:
-        flops_per_step = flops_per_micro_step * cfg.grad_accumulation_steps
-        throughput_metrics = (step_time, flops_per_step)
+      throughput_metrics = throughput_ctx.get_metrics()
 
       utils.log(
         cfg,
@@ -175,8 +154,6 @@ def main(argv):
         throughput_metrics,
       )
       train_loss_array = []
-      if cfg.measure_throughput:
-        step_time = 0
 
     # Checkpoint
     if master_process and is_step and step in save_points and cfg.save_intermediate_checkpoints:
