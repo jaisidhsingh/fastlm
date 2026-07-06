@@ -1,8 +1,20 @@
 from fractions import Fraction
 
+import torch
 import wandb
+from transformers import AutoConfig, AutoModelForCausalLM
 
-# from src.models.to_hf import HFModelConfig
+from src.models.to_hf import HFModelConfig, HFModelForCausalLM
+
+# registration
+AutoConfig.register(
+  'hybridlm_hf',
+  HFModelConfig,
+)
+AutoModelForCausalLM.register(
+  HFModelConfig,
+  HFModelForCausalLM,
+)
 
 
 def construct_model_config(cfg):

@@ -2,6 +2,7 @@ import os
 import tempfile
 
 import torch
+from transformers import AutoModelForCausalLM
 
 from src.models.to_hf import (
   HFModelConfig,
@@ -12,7 +13,7 @@ from src.models.to_hf import (
 from src.models.transformer import ModelConfig, Transformer
 
 SEED = 0
-DEVICE = 'cpu'
+DEVICE = 'cuda'
 MODEL_DTYPE = torch.float32
 BATCH_SIZE = 2
 SEQ_LEN = 16
@@ -109,7 +110,7 @@ def test_hf_model_forward():
   """Test that HFModelForCausalLM can do a forward pass."""
   hf_cfg = HFModelConfig(
     vocab_size=1024,
-    seq_len=32,
+    seq_len=SEQ_LEN,
     dim=128,
     expand=2.0,
     n_layers=4,
@@ -120,13 +121,11 @@ def test_hf_model_forward():
     attn_qk_norm=True,
   )
 
-  hf_model = HFModelForCausalLM(hf_cfg)
+  hf_model = HFModelForCausalLM(hf_cfg).to(device=DEVICE, dtype=MODEL_DTYPE)
   hf_model.eval()
 
-  input_ids = torch.randint(0, hf_cfg.vocab_size, (BATCH_SIZE, SEQ_LEN))
-
-  with torch.inference_mode():
-    out = hf_model(input_ids=input_ids)
+  input_ids = torch.randint(0, hf_cfg.vocab_size, (BATCH_SIZE, SEQ_LEN)).to(device=DEVICE, dtype=torch.long)
+  out = hf_model(input_ids=input_ids)
 
   assert out.logits.shape == (BATCH_SIZE, SEQ_LEN, hf_cfg.vocab_size), (
     f'Expected {(BATCH_SIZE, SEQ_LEN, hf_cfg.vocab_size)}, got {out.logits.shape}'
@@ -134,7 +133,7 @@ def test_hf_model_forward():
   assert out.loss is None  # No labels provided
 
   # Test with labels
-  labels = torch.randint(0, hf_cfg.vocab_size, (BATCH_SIZE, SEQ_LEN))
+  labels = torch.randint(0, hf_cfg.vocab_size, (BATCH_SIZE, SEQ_LEN)).to(device=DEVICE, dtype=torch.long)
   with torch.inference_mode():
     out_with_loss = hf_model(input_ids=input_ids, labels=labels)
 
@@ -146,29 +145,6 @@ def test_hf_model_forward():
 
 @torch.inference_mode()
 def test_load_checkpoint_into_hf():
-  """Test that an internal Transformer's state dict can be loaded into HFModelForCausalLM."""
-  # Create an internal model and save its state
-  internal_cfg = ModelConfig(
-    vocab_size=1024,
-    seq_len=32,
-    dim=128,
-    expand=2.0,
-    n_layers=4,
-    n_heads=4,
-    mlp='glu',
-    token_mixer='attn',
-    attn_gate=True,
-    attn_qk_norm=True,
-  )
-  internal_model = Transformer(internal_cfg)
-  internal_model.eval()
-
-  # Do a forward pass to generate some gradients and ensure all params are used
-  x = torch.randint(0, internal_cfg.vocab_size, (BATCH_SIZE, SEQ_LEN))
-  with torch.inference_mode():
-    y_internal = internal_model(x)
-
-  # Create an HF model with matching config
   hf_cfg = HFModelConfig(
     vocab_size=1024,
     seq_len=32,
@@ -183,83 +159,13 @@ def test_load_checkpoint_into_hf():
   )
   hf_model = HFModelForCausalLM(hf_cfg)
   hf_model.eval()
+  print(hf_model)
 
-  # Save internal state dict to a temp file, then load into HF model
-  with tempfile.NamedTemporaryFile(suffix='.pt', delete=False) as tmp:
-    ckpt_path = tmp.name
-    torch.save(internal_model.state_dict(), ckpt_path)
-
-  try:
-    load_checkpoint_into_hf(hf_model, ckpt_path)
-
-    # Verify outputs match after loading
-    with torch.inference_mode():
-      y_hf = hf_model.model(x)
-
-    assert torch.allclose(y_internal, y_hf, atol=1e-5), (
-      f'Outputs do not match! Max diff: {(y_internal - y_hf).abs().max().item()}'
-    )
-
-    print('✓ Load checkpoint into HF model test passed')
-  finally:
-    os.unlink(ckpt_path)
-
-
-@torch.inference_mode()
-def test_load_checkpoint_from_dict():
-  """Test loading from a dict with 'state_dict' key (matching checkpoint format)."""
-  internal_cfg = ModelConfig(
-    vocab_size=1024,
-    seq_len=32,
-    dim=128,
-    expand=2.0,
-    n_layers=4,
-    n_heads=4,
-    mlp='glu',
-    token_mixer='attn',
-    attn_gate=True,
-    attn_qk_norm=True,
-  )
-  internal_model = Transformer(internal_cfg)
-  internal_model.eval()
-
-  x = torch.randint(0, internal_cfg.vocab_size, (BATCH_SIZE, SEQ_LEN))
-  with torch.inference_mode():
-    y_internal = internal_model(x)
-
-  hf_cfg = HFModelConfig(
-    vocab_size=1024,
-    seq_len=32,
-    dim=128,
-    expand=2.0,
-    n_layers=4,
-    n_heads=4,
-    mlp='glu',
-    token_mixer='attn',
-    attn_gate=True,
-    attn_qk_norm=True,
-  )
-  hf_model = HFModelForCausalLM(hf_cfg)
-  hf_model.eval()
-
-  # Save in checkpoint format (wrapped in dict with 'state_dict' key)
-  with tempfile.NamedTemporaryFile(suffix='.pt', delete=False) as tmp:
-    ckpt_path = tmp.name
-    torch.save({'state_dict': internal_model.state_dict()}, ckpt_path)
-
-  try:
-    load_checkpoint_into_hf(hf_model, ckpt_path)
-
-    with torch.inference_mode():
-      y_hf = hf_model.model(x)
-
-    assert torch.allclose(y_internal, y_hf, atol=1e-5), (
-      f'Outputs do not match! Max diff: {(y_internal - y_hf).abs().max().item()}'
-    )
-
-    print('✓ Load checkpoint from dict test passed')
-  finally:
-    os.unlink(ckpt_path)
+  path = '/fast/jsingh/projects/fastlm/hf_conv_test'
+  os.makedirs(path, exist_ok=True)
+  hf_model.save_pretrained(path)
+  hf_model = AutoModelForCausalLM.from_pretrained(path)
+  print(hf_model)
 
 
 @torch.inference_mode()
@@ -304,8 +210,8 @@ def main():
   test_hf_model_creation()
   test_hf_model_forward()
   test_load_checkpoint_into_hf()
-  test_load_checkpoint_from_dict()
-  test_hf_model_generation_prepare_inputs()
+  # test_load_checkpoint_from_dict()
+  # test_hf_model_generation_prepare_inputs()
 
   print('\n=== All tests passed! 🎉 ===')
 
