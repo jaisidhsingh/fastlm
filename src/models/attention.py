@@ -68,14 +68,8 @@ class GatedAttention(nn.Module):
     v = v.transpose(1, 2)  # (bsz, nh, seqlen, h_dim)
 
     # different attention-implementations for different setups
-    if self.use_flex_attention and isinstance(attention_mask, BlockMask):
+    if attention_mask is not None and isinstance(attention_mask, BlockMask):
       out = self._compiled_flex_attention(q, k, v, block_mask=attention_mask)  # (bsz, nh, seqlen, h_dim)
-
-    elif attention_mask is not None:
-      # attn_mask has shape (bsz, seqlen, seqlen)
-      # from (bsz, L, L) to (bsz, 1, L, L) so it broadcasts over heads
-      attention_mask = attention_mask.unsqueeze(1)
-      out = F.scaled_dot_product_attention(q, k, v, attn_mask=attention_mask)  # (bsz, nh, seqlen, h_dim)
 
     else:
       with sdpa_kernel(SDPBackend.FLASH_ATTENTION):
