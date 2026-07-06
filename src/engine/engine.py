@@ -12,7 +12,8 @@ from src.optim import initialize_scheduler, intialize_optimizer
 from src.optim.lr_schedule import LinearCooldown
 
 try:
-  from torch.nn.attention.flex_attention import create_block_mask, BlockMask
+  from torch.nn.attention.flex_attention import BlockMask, create_block_mask
+
   _FLEX_ATTENTION_AVAILABLE = True
 except ImportError:
   _FLEX_ATTENTION_AVAILABLE = False
@@ -56,9 +57,7 @@ def _build_flex_block_mask(docs_lengths_batch, seq_len, device):
     same_doc = doc_ids[b, q_idx] == doc_ids[b, kv_idx]
     return causal & same_doc
 
-  block_mask = create_block_mask(
-    intra_doc_causal_mask_fn, B=bsz, H=None, Q_LEN=seq_len, KV_LEN=seq_len, device=device
-  )
+  block_mask = create_block_mask(intra_doc_causal_mask_fn, B=bsz, H=None, Q_LEN=seq_len, KV_LEN=seq_len, device=device)
   return block_mask
 
 
@@ -113,7 +112,9 @@ def _move_to_device(batch, seq_len, device, intra_doc_masking, use_flex_attentio
       # No mask needed: GatedAttention will use F.sdpa with is_causal=True (enables FlashAttention)
       attn_mask = None
     else:
-      attn_mask = torch.tril(torch.ones(seq_len, seq_len)).repeat(batch['input_ids'].shape[0], 1, 1).to(dtype=torch.bool)
+      attn_mask = (
+        torch.tril(torch.ones(seq_len, seq_len)).repeat(batch['input_ids'].shape[0], 1, 1).to(dtype=torch.bool)
+      )
     linear_masks = torch.ones((bsz, seq_len), dtype=torch.bool, device=device)
     cu_seqlens = None
 
@@ -151,7 +152,9 @@ class TorchEngine(torch.nn.Module):
     self.use_flex_attention = getattr(cfg, 'use_flex_attention', False)
 
     if self.use_flex_attention and not _FLEX_ATTENTION_AVAILABLE:
-      raise ImportError('use_flex_attention=True requires PyTorch >= 2.5. Update PyTorch or set use_flex_attention=False.')
+      raise ImportError(
+        'use_flex_attention=True requires PyTorch >= 2.5. Update PyTorch or set use_flex_attention=False.'
+      )
 
     self.device = device
 
