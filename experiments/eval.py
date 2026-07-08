@@ -1,37 +1,276 @@
+"""Evaluation script for trained models.
+
+Supports two benchmark modes specified via a YAML config's `benchmarks` list:
+  - ruler     : RULER benchmark via lm_eval (HF format)
+  - dclm_core  : DCLM CORE benchmark via src/eval/core_eval.py
+
+The config's `benchmarks` list is split across cluster job array indices,
+so a config with `benchmarks: [ruler, dclm_core]` produces 2 jobs:
+  job_idx=0 → ruler, job_idx=1 → dclm_core.
+
+Usage:
+  python -m experiments.eval --config=src/config/cfg_eval.yaml --job_idx=0
+"""
+
+import csv
+import json
+import os
+import random
+import time
+
 import torch
+import yaml
 from absl import app, flags
-from lm_eval import evaluator
 
-import src.utils as utils
+from src.constants import SCALING_RESULTS_FOLDER
+from src.models.construct import construct_hf_config
+from src.models.to_hf import HFModelForCausalLM, load_checkpoint_into_hf, register
+from src.utils.base_utils import load_config, print_master
 
-flags.DEFINE_string('config', 'eval_config.yaml', 'Path to the eval config.')
-flags.DEFINE_string('model', 'path/to/my/model', 'Path to your model folder.')
-flags.DEFINE_string('tasks', 'hellaswag,piqa,lambada', 'Comma-separated benchmarks to eval.')
-flags.DEFINE_string(
-  'array_seq',
-  'sequential',
-  'If `parallel`: split the tasks up into parallel job-arrays, else `sequential`: iterate over tasks in on job-array.',
-)
+register()
+
+flags.DEFINE_string('config', 'src/config/cfg_eval.yaml', 'Path to config.yaml file.')
 flags.DEFINE_integer('job_idx', None, 'Job idx for job-array sweeps. From 0 to n-1.')
 flags.DEFINE_integer('job_cluster', None, 'Job cluster ID.')
 FLAGS = flags.FLAGS
 
 
-def make_custom_ckpt_hf(cfg, model):
-  ckpt = torch.load(cfg.ckpt_path, weights_only=False, map_location='cpu')
-  model.model.load_state_dict(ckpt['state_dict'])
-  model.save_pretrained(cfg.eval_intermediate_model_folder)
+# -----------------------------------------------------------------------------
+# Tokenizer adapter: wraps an HF tokenizer to match the nanochat interface
+# expected by core_eval.py functions.
+# -----------------------------------------------------------------------------
+
+
+class HFTokenizerAdapter:
+  """Wraps an HF AutoTokenizer so it works with core_eval.py functions.
+
+  core_eval expects:
+    tokenizer(prompts, prepend=<bos_token_id>) -> list[list[int]]
+    tokenizer.get_bos_token_id() -> int
+  """
+
+  def __init__(self, hf_tokenizer):
+    self._tok = hf_tokenizer
+
+  def get_bos_token_id(self):
+    return self._tok.bos_token_id
+
+  def __call__(self, prompts, prepend=None):
+    if isinstance(prompts, str):
+      prompts = [prompts]
+    result = []
+    for prompt in prompts:
+      ids = []
+      if prepend is not None:
+        ids.append(prepend if isinstance(prepend, int) else prepend[0])
+      ids.extend(self._tok.encode(prompt, add_special_tokens=False))
+      result.append(ids)
+    return result
+
+
+# -----------------------------------------------------------------------------
+# Model loading
+# -----------------------------------------------------------------------------
+
+
+def setup_model(cfg):
+  """Load a model from a checkpoint, returning the HF-wrapped model."""
+  hf_cfg = construct_hf_config(cfg)
+  model = HFModelForCausalLM(hf_cfg)
+  model = load_checkpoint_into_hf(model, cfg.raw_ckpt)
   return model
 
 
-def main(argv):
-  cfg = utils.load_config(FLAGS.config)
-  model = None
-  model = make_custom_ckpt_hf(cfg, model)
+# -----------------------------------------------------------------------------
+# Path helpers
+# -----------------------------------------------------------------------------
+
+
+def _get_results_base(cfg):
+  arch_id = cfg.arch_id
+  gbs = cfg.global_batch_size
+  return os.path.join(SCALING_RESULTS_FOLDER, arch_id, 'gbs_wise_results', f'gbs_{gbs}')
+
+
+def _get_save_prefix(cfg):
+  lr = cfg.lr
+  return f'eval_lr-{str(lr).replace(".", "p")}'
+
+
+# -----------------------------------------------------------------------------
+# RULER evaluation
+# -----------------------------------------------------------------------------
+
+
+def eval_ruler(cfg):
+  from lm_eval import evaluator
+  from transformers import AutoTokenizer
+
+  device = 'cpu'
+  if torch.cuda.is_available():
+    device = 'cuda'
+  elif torch.mps.is_available():
+    device = 'mps'
+
+  base_folder = _get_results_base(cfg)
+  save_prefix = _get_save_prefix(cfg)
+
+  # Save model + tokenizer to temp HF folder
+  eval_ckpt_folder = os.path.join(base_folder, 'tmp4eval')
+  model = setup_model(cfg)
+  model.save_pretrained(eval_ckpt_folder)
+
+  tokenizer = AutoTokenizer.from_pretrained(cfg.tokenizer_path)
+  tokenizer.save_pretrained(eval_ckpt_folder)
+  del model, tokenizer
+
+  # Run lm_eval — tasks come from the resolved benchmark name (e.g. "ruler")
+  tasks = [cfg.benchmarks]
+  print_master(f'Running RULER evaluation on tasks: {tasks}')
   results = evaluator.simple_evaluate(
-    model='hf', model_args=cfg.eval_intermediate_model_folder, tasks=FLAGS.tasks.split(',')
+    model='hf',
+    model_args=f'pretrained={eval_ckpt_folder}',
+    tasks=tasks,
+    batch_size='auto',
+    device=device,
   )
-  print(results)
+
+  output_path = os.path.join(base_folder, f'{save_prefix}_{"__".join(tasks)}.json')
+  with open(output_path, 'w') as f:
+    json.dump(results, f)
+  print_master(f'RULER results saved to {output_path}')
+
+
+# -----------------------------------------------------------------------------
+# DCLM CORE evaluation
+# -----------------------------------------------------------------------------
+
+
+def _get_eval_bundle_dir():
+  """Locate the dclm-core/eval_bundle directory relative to this file."""
+  # experiments/eval.py -> experiments -> fastlm -> code -> dclm-core/eval_bundle
+  code_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+  return os.path.join(code_root, 'dclm-core', 'eval_bundle')
+
+
+def eval_dclm_core(cfg):
+  from transformers import AutoTokenizer
+
+  from src.eval.core_eval import evaluate_task
+
+  device = 'cpu'
+  if torch.cuda.is_available():
+    device = 'cuda'
+  elif torch.mps.is_available():
+    device = 'mps'
+
+  base_folder = _get_results_base(cfg)
+  save_prefix = _get_save_prefix(cfg)
+
+  # Load model
+  model = setup_model(cfg)
+  raw_model = model.model  # internal Transformer (returns raw logits)
+  raw_model.max_seq_len = cfg.seq_len  # for truncation logic in core_eval
+  raw_model = raw_model.to(device)
+  raw_model.eval()
+
+  # Load tokenizer via adapter
+  hf_tokenizer = AutoTokenizer.from_pretrained(cfg.tokenizer_path)
+  tokenizer = HFTokenizerAdapter(hf_tokenizer)
+
+  # Load DCLM task config
+  eval_bundle_dir = _get_eval_bundle_dir()
+  config_path = os.path.join(eval_bundle_dir, 'core.yaml')
+  data_base_path = os.path.join(eval_bundle_dir, 'eval_data')
+  eval_meta_path = os.path.join(eval_bundle_dir, 'eval_meta_data.csv')
+
+  with open(config_path, 'r') as f:
+    dclm_config = yaml.safe_load(f)
+  tasks = dclm_config['icl_tasks']
+
+  # Load random baselines
+  random_baselines = {}
+  with open(eval_meta_path, 'r') as f:
+    reader = csv.DictReader(f)
+    for row in reader:
+      random_baselines[row['Eval Task']] = float(row['Random baseline'])
+
+  # Evaluate each task
+  results = {}
+  centered_results = {}
+  for task in tasks:
+    start_time = time.time()
+    label = task['label']
+    task_meta = {
+      'task_type': task['icl_task_type'],
+      'dataset_uri': task['dataset_uri'],
+      'num_fewshot': task['num_fewshot'][0],
+      'continuation_delimiter': task.get('continuation_delimiter', ' '),
+    }
+
+    data_path = os.path.join(data_base_path, task_meta['dataset_uri'])
+    with open(data_path, 'r') as f:
+      data = [json.loads(line.strip()) for line in f]
+
+    shuffle_rng = random.Random(1337)
+    shuffle_rng.shuffle(data)
+
+    print_master(f'Evaluating: {label} ({task_meta["num_fewshot"]}-shot, type: {task_meta["task_type"]})...')
+    accuracy = evaluate_task(raw_model, tokenizer, data, device, task_meta)
+    results[label] = accuracy
+    random_baseline = random_baselines[label]
+    centered_result = (accuracy - 0.01 * random_baseline) / (1.0 - 0.01 * random_baseline)
+    centered_results[label] = centered_result
+    elapsed = time.time() - start_time
+    print_master(f'  accuracy: {accuracy:.4f} | centered: {centered_result:.4f} | time: {elapsed:.2f}s')
+
+  core_metric = sum(centered_results.values()) / len(centered_results)
+  print_master(f'DCLM CORE metric: {core_metric:.4f}')
+
+  # Save results
+  output = {
+    'results': results,
+    'centered_results': centered_results,
+    'core_metric': core_metric,
+  }
+  output_path = os.path.join(base_folder, f'{save_prefix}_dclm_core.json')
+  os.makedirs(os.path.dirname(output_path), exist_ok=True)
+  with open(output_path, 'w') as f:
+    json.dump(output, f, indent=2)
+  print_master(f'DCLM CORE results saved to {output_path}')
+
+
+# -----------------------------------------------------------------------------
+# Main
+# -----------------------------------------------------------------------------
+
+BENCHMARK_DISPATCH = {
+  'ruler': eval_ruler,
+  'dclm_core': eval_dclm_core,
+}
+
+
+def main(argv):
+  cfg_path = FLAGS.config
+  cfg, sweep_size = load_config(cfg_path)
+
+  print_master(f'Config loaded from {cfg_path}  (job_idx={FLAGS.job_idx}, sweep_size={sweep_size})')
+
+  benchmark = cfg.benchmarks
+
+  # If benchmarks is still a list, the user forgot --job_idx
+  if isinstance(benchmark, list):
+    raise ValueError(
+      f'benchmarks is a list ({benchmark}) — you must specify --job_idx to pick a single '
+      f'benchmark. Valid indices: 0-{len(benchmark) - 1}.'
+    )
+
+  if benchmark not in BENCHMARK_DISPATCH:
+    raise ValueError(f"Unknown benchmark '{benchmark}'. Valid options: {list(BENCHMARK_DISPATCH.keys())}")
+
+  print_master(f'Running benchmark: {benchmark}')
+  BENCHMARK_DISPATCH[benchmark](cfg)
+  print_master('Evaluation complete.')
 
 
 if __name__ == '__main__':

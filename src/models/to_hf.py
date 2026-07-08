@@ -184,3 +184,19 @@ def load_checkpoint_into_hf(hf_model, ckpt_path):
   print('unexpected:', unexpected)
 
   return hf_model
+
+
+def register():
+  from transformers import AutoConfig, AutoModelForCausalLM
+
+  from src.models.to_hf import HFModelConfig, HFModelForCausalLM
+
+  AutoConfig.register(
+    'hybridlm_hf',
+    HFModelConfig,
+  )
+  AutoModelForCausalLM.register(
+    HFModelConfig,
+    HFModelForCausalLM,
+  )
+  print('Registed custom model into AutoModelForCausalLM format.')

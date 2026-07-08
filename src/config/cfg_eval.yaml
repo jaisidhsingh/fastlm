@@ -1,0 +1,62 @@
+# =============================================================================
+# Evaluation config for experiments/eval.py
+#
+# The `benchmarks` key is a *list* — load_config() splits combinations across
+# cluster job-array indices, so a config with:
+#   benchmarks: [ruler, dclm_core]
+# produces 2 jobs:
+#   job_idx=0 → ruler
+#   job_idx=1 → dclm_core
+#
+# Usage:
+#   python -m experiments.eval --config=src/config/cfg_eval.yaml --job_idx=0
+# =============================================================================
+
+benchmarks:
+  - ruler
+  - dclm_core
+
+# ---------------------------------------------------------------------------
+# Checkpoint & tokenizer
+# ---------------------------------------------------------------------------
+raw_ckpt: /path/to/checkpoint.pt
+tokenizer_path: /fast/jsingh/saved_tokenizers/better-gpt2
+
+# ---------------------------------------------------------------------------
+# MODEL config (must match the checkpoint's architecture)
+# ---------------------------------------------------------------------------
+arch_id: attn
+param_scale_id: 20M
+model: transformer
+d_model: 256
+mlp_class: glu
+expand: "3.0"
+n_layers: 8
+n_heads: 4
+rms_norm: true
+tie_embeddings: true
+torch_compile: false
+use_flex_attention: false
+token_mixer: attn
+hybrid_mixer_ratio: 1
+layer_norm_scaling: false
+residual_connection: add
+attn_gate: true
+attn_qk_norm: true
+gdn_conv_size: 4
+gdn_gate: true
+gdn_neg_eigval: true
+intra_doc_masking: true
+
+# ---------------------------------------------------------------------------
+# DATA config (vocab + seq_len must match checkpoint)
+# ---------------------------------------------------------------------------
+vocab_size: 50304
+seq_len: 2048
+dtype: bfloat16
+
+# ---------------------------------------------------------------------------
+# TRAINING config (used for results folder path)
+# ---------------------------------------------------------------------------
+global_batch_size: 16
+lr: 0.001

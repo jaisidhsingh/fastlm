@@ -8,7 +8,7 @@ import pandas as pd
 import tyro
 import yaml
 
-from src.constants import DEFAULT_CONFIG, SCALING_LADDER
+from src.constants import DEFAULT_CONFIG, SCALING_LADDER, SCALING_RESULTS_FOLDER
 
 LR_FLOAT_TO_STR_MAP = {0.00025: '25e-5', 0.0005: '5e-4', 0.001: '1e-3', 0.002: '2e-3', 0.004: '4e-3', 0.008: '8e-3'}
 PARAM_SCALE_ID_TO_MEM_MAP = {'20M': 32, '50M': 64, '150M': 72, '300M': 96}
@@ -35,6 +35,10 @@ class ManagerConfig:
   mode: str = 'main'
   submit: str = 'yes'
   routine: str = 'train'
+  # --- eval-specific ---
+  benchmarks: str = 'ruler,dclm_core'  # comma-separated benchmark list
+  ckpt_name: str = 'end_of_training_backup'  # which checkpoint to evaluate
+  tokenizer_path: str = '/fast/jsingh/saved_tokenizers/better-gpt2'
 
 
 def check_subfolders(cfg):
@@ -229,11 +233,11 @@ def train_management(cfg: ManagerConfig):
   if isinstance(cfg.lr, str):
     if cfg.lr == 'all_parallel':
       lr = SCALING_LADDER['learning_rates']
-    elif "," in cfg.lr:
+    elif ',' in cfg.lr:
       lr = []
-      for x in cfg.lr.split(","):
-          if len(x) > 0:
-            lr.append(float(x))
+      for x in cfg.lr.split(','):
+        if len(x) > 0:
+          lr.append(float(x))
     else:
       raise NotImplementedError('No other string options supported for `cfg.lr`')
   else:
@@ -302,8 +306,199 @@ def train_management(cfg: ManagerConfig):
       print(result.stderr)
 
 
-def eval_management(cfg):
-  pass
+# =============================================================================
+# Eval management
+# =============================================================================
+
+
+def _get_eval_config_path(arch_id, n, gbs, lr):
+  """YAML config path with 'eval' in the name to distinguish from train configs."""
+  lr_ext = LR_FLOAT_TO_STR_MAP[lr]
+  return f'/lustre/home/jsingh/projects/fastlm/execs/{arch_id}/{n}/cfg-eval_gbs-{gbs}_lr-{lr_ext}.yaml'
+
+
+def _get_eval_jobfile_path(arch_id, n, gbs, lr):
+  """Job submission file path with 'eval' in the name."""
+  lr_ext = LR_FLOAT_TO_STR_MAP[lr]
+  return f'/lustre/home/jsingh/projects/fastlm/execs/{arch_id}/{n}/job-eval_gbs-{gbs}_lr-{lr_ext}.sub'
+
+
+def _get_eval_config_content(arch_id, n, gbs, lr, benchmarks, ckpt_name, tokenizer_path):
+  """Build the eval config dict.  `benchmarks` is kept as a list so that
+  load_config() splits it into individual job-array elements."""
+  mixer, ratio = parse_arch_id(arch_id)
+
+  # Construct the checkpoint path:
+  #   {SCALING_RESULTS_FOLDER}/{arch_id}/{n}/gbs_wise_results/gbs_{gbs}/checkpoints/lr_{lr_str}/ckpt_{ckpt_name}.pt
+  lr_str = str(lr).replace('.', 'p')
+  raw_ckpt = os.path.join(
+    SCALING_RESULTS_FOLDER,
+    arch_id,
+    n,
+    'gbs_wise_results',
+    f'gbs_{gbs}',
+    'checkpoints',
+    f'lr_{lr_str}',
+    f'ckpt_{ckpt_name}.pt',
+  )
+
+  return {
+    'benchmarks': benchmarks,
+    'raw_ckpt': raw_ckpt,
+    'tokenizer_path': tokenizer_path,
+    # Model arch (must match training)
+    'arch_id': arch_id,
+    'param_scale_id': n,
+    'model': 'transformer',
+    'd_model': SCALING_LADDER['models'][n]['d_model'],
+    'mlp_class': 'glu',
+    'expand': '3.0',
+    'n_layers': SCALING_LADDER['models'][n]['n_layers'],
+    'n_heads': SCALING_LADDER['models'][n]['n_heads'],
+    'rms_norm': True,
+    'tie_embeddings': True,
+    'torch_compile': False,
+    'use_flex_attention': False,
+    'token_mixer': mixer,
+    'hybrid_mixer_ratio': ratio,
+    'layer_norm_scaling': False,
+    'residual_connection': 'add',
+    'attn_gate': True,
+    'attn_qk_norm': True,
+    'gdn_conv_size': 4,
+    'gdn_gate': True,
+    'gdn_neg_eigval': True,
+    'intra_doc_masking': True,
+    # Data
+    'vocab_size': 50304,
+    'seq_len': 2048,
+    'dtype': 'bfloat16',
+    # Used for results folder path
+    'global_batch_size': gbs,
+    'lr': lr,
+  }
+
+
+def _get_eval_jobfile_content(arch_id, n, gbs, lr, n_jobs, cpus=8):
+  """Generate the condor submission file content for an eval job."""
+  mem = PARAM_SCALE_ID_TO_MEM_MAP[n]
+
+  return f"""# Executable should be a full path
+executable=/home/jsingh/projects/fastlm/cluster/single_gpu/eval_condor.sh
+
+# Hyperparmeters are specified in a YAML configuration file
+config={_get_eval_config_path(arch_id, n, gbs, lr)}
+
+# Queue as many jobs as points in the hyperaparameter grid (one per benchmark)
+n_jobs={n_jobs}
+dp=1
+
+# Pass arguments to the executable
+arguments = $(config) $(Process) $(Cluster)
+
+# Logs
+LOGS_DIR=/fast/jsingh/logs/fastlm/june/eval
+
+error = $(LOGS_DIR)/err/job.$(Cluster).$(Process).err
+output = $(LOGS_DIR)/out/job.$(Cluster).$(Process).out
+log = $(LOGS_DIR)/log/job.$(Cluster).$(Process).log
+
+# Job requirements
+request_memory = {mem}G
+request_cpus = {cpus}
+request_gpus = 1
+requirements = (TARGET.CUDADeviceName == "NVIDIA A100-SXM4-80GB" || TARGET.CUDADeviceName == "NVIDIA H100 80GB HBM3" || TARGET.CUDADeviceName == "NVIDIA H100") && (Machine != "g174.internal.cluster.is.localnet")
+
+queue $(n_jobs)
+  """
+
+
+def _submit_and_log(cfg, jobfile_path, lr, n_jobs, eval_mode=True):
+  """Submit a job file via condor_submit_bid and log to the CSV database."""
+  result = subprocess.run(
+    ['condor_submit_bid', f'{cfg.bid}', jobfile_path],
+    capture_output=True,
+    text=True,
+  )
+  if result.returncode == 0:
+    print(result.stdout)
+    cluster_id = result.stdout.split(' cluster ')[-1][:-2]
+    cluster_id = int(cluster_id)
+
+    info = {
+      'arch_id': cfg.arch_id,
+      'n': cfg.n,
+      'gbs': cfg.gbs,
+      'lr': lr,
+      'dp': 1,
+      'eval': 'yes' if eval_mode else 'no',
+      'cfg': 'yes',
+      'sub': 'yes',
+      'cluster_id': cluster_id,
+      'n_jobs': n_jobs,
+    }
+    new_row = pd.DataFrame([info])
+
+    try:
+      df = pd.read_csv(DB_PATH)
+    except (FileNotFoundError, pd.errors.EmptyDataError):
+      df = pd.DataFrame()
+
+    df = pd.concat([df, new_row], ignore_index=True)
+    df.to_csv(DB_PATH, index=False)
+
+  else:
+    print('Something bad happened when we submit the job using subprocess! Printing the subprocess call error:')
+    print(result.stderr)
+
+
+def eval_management(cfg: ManagerConfig):
+  check_subfolders(cfg)
+
+  # Parse benchmarks into a list
+  benchmarks = [b.strip() for b in cfg.benchmarks.split(',') if b.strip()]
+
+  # Parse learning rate(s) — each lr gets its own yaml + job file because
+  # checkpoint paths depend on lr and can't be cross-product'd correctly.
+  if isinstance(cfg.lr, str):
+    if cfg.lr == 'all_parallel':
+      lrs = SCALING_LADDER['learning_rates']
+    elif ',' in cfg.lr:
+      lrs = []
+      for x in cfg.lr.split(','):
+        if len(x) > 0:
+          lrs.append(float(x))
+    else:
+      lrs = [float(cfg.lr)]
+  else:
+    lrs = [cfg.lr]
+
+  for lr in lrs:
+    # Build and save the eval config
+    config_path = _get_eval_config_path(cfg.arch_id, cfg.n, cfg.gbs, lr)
+    config = _get_eval_config_content(cfg.arch_id, cfg.n, cfg.gbs, lr, benchmarks, cfg.ckpt_name, cfg.tokenizer_path)
+    with open(config_path, 'w') as f:
+      yaml.safe_dump(config, f, default_flow_style=False)
+
+    # Count n_jobs: only `benchmarks` is a list in the config
+    n_jobs = len(benchmarks)
+
+    # Build and save the job file
+    jobfile_path = _get_eval_jobfile_path(cfg.arch_id, cfg.n, cfg.gbs, lr)
+    jobfile_content = _get_eval_jobfile_content(cfg.arch_id, cfg.n, cfg.gbs, lr, n_jobs)
+    with open(jobfile_path, 'w') as f:
+      f.write(jobfile_content)
+
+    print(f'Wrote config -> {config_path}')
+    print(f'Wrote job    -> {jobfile_path}  (n_jobs={n_jobs})')
+
+    if cfg.submit == 'yes':
+      _submit_and_log(cfg, jobfile_path, lr, n_jobs, eval_mode=True)
+
+
+# =============================================================================
+# Main
+# =============================================================================
 
 
 def main(cfg):

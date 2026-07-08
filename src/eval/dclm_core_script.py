@@ -136,7 +136,7 @@ def main():
   parser.add_argument(
     '--eval',
     type=str,
-    default='core,bpb,sample',
+    default='core,bpb',  # removed "sample"
     help='Comma-separated evaluations to run: core,bpb,sample (default: all)',
   )
   parser.add_argument(

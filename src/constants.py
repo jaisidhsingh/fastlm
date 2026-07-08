@@ -48,6 +48,18 @@ SCALING_LADDER = {
       'num_token_budgets': 5,
       'beta2': 0.95,
     },
+    '1B': {
+      'total_params': 1002203904,
+      'non_embedding_params': 924936960,
+      'd_model': 1536,
+      'n_layers': 28,
+      'n_heads': 16,
+      'dp': 8,
+      'peak_mbs': 8,
+      'max_tokens_billions': 15,
+      'num_token_budgets': 5,
+      'beta2': 0.95,
+    },
   },
   'batch_sizes': [16, 32, 64, 128, 256, 512],
   'batch_size_vs_token_budget_strategy': {

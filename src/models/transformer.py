@@ -157,7 +157,7 @@ class Transformer(nn.Module):
 
     return nn.ModuleList(layers)
 
-  def forward(self, x, attention_mask, linear_mask=None, cu_seqlens=None):
+  def forward(self, x, attention_mask=None, linear_mask=None, cu_seqlens=None):
     # x: (bsz, seqlen)
     x = self.embed_tokens(x)  # (bsz, seqlen, dim)
     self.freqs_cis = self.freqs_cis.to(x.device)
