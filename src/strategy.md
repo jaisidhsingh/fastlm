@@ -172,3 +172,8 @@ Since for each setting of $N, D, b, \eta$, we have a `metrics_<token_budget>.jso
   - fixed $b=32$
   - best $\eta$
   - color of curve varies as per param scale $N$
+
+## Optimised throughputs
+
+- 2B `attn` model gets 35-38% MFU and 121-126K tokens-per-sec on 4 H100s and GBS=64 (MBS=4, GAS=4). Lower bound is intra-doc off and upper is intra-doc on.
+- should check what speeds on gets with GDN models.

@@ -55,7 +55,7 @@ SCALING_LADDER = {
       'n_layers': 28,
       'n_heads': 16,
       'dp': 8,
-      'peak_mbs': 8,
+      'peak_mbs': 4,
       'max_tokens_billions': 15,
       'num_token_budgets': 5,
       'beta2': 0.95,

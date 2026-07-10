@@ -58,6 +58,8 @@ def get_steps_from_chinchilla_multiplier(cfg, non_embed_params: int, world_size:
 
 
 def set_token_budget_id_from_gbs(cfg):
+  # if cfg.global_batch_size == 8:
+  #   return '1.0B'
   if not cfg.resume:
     mp = SCALING_LADDER['batch_size_vs_token_budget_strategy']['staggered_runs']
     cfg.token_budget_id = mp[cfg.global_batch_size]

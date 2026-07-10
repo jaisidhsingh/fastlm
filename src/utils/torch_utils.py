@@ -1,5 +1,6 @@
 import os
 import random
+from datetime import timedelta
 
 import numpy as np
 import torch
@@ -13,12 +14,13 @@ def pytorch_setup(cfg):
   ddp = int(os.environ.get('RANK', -1)) != -1  # check if DDP is enabled
 
   if ddp:
-    init_process_group(backend='nccl')
     rank = int(os.environ['RANK'])
     local_rank = int(os.environ['LOCAL_RANK'])
     world_size = int(os.environ['WORLD_SIZE'])
+    torch.cuda.set_device(local_rank)
+
+    init_process_group(backend='nccl', device_id=torch.device(f'cuda:{local_rank}'), timeout=timedelta(seconds=60))
     device = f'cuda:{local_rank}'
-    torch.cuda.device(device)
     master_process = rank == 0
     seed_offset = rank
   else:
@@ -59,5 +61,8 @@ def pytorch_setup(cfg):
 
 def destroy_ddp():
   if torch.distributed.is_initialized():
-    torch.distributed.barrier()
-    destroy_process_group()
+    # torch.distributed.barrier()
+    try:
+      destroy_process_group()
+    except:
+      print(f'DDP teardown warning suppressed: {type(e).__name__}: {e}')

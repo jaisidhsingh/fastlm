@@ -188,9 +188,15 @@ class Transformer(nn.Module):
     self.lm_head.weight = self.embed_tokens.weight
 
   def count_params(self, non_embedding=True):
-    n_params = sum(p.numel() for p in self.parameters())
+    embedding_size = self.embed_tokens.weight.numel()
+    n_params_in_layers = sum(p.numel() for p in self.layers.parameters())
+    n_params_in_out_norm = sum(p.numel() for p in self.out_norm.parameters())
+    embedding_params = embedding_size if self.cfg.tie_embeddings else 2 * embedding_size
+    total = embedding_params + n_params_in_layers + n_params_in_out_norm
+    n_params = total
     if non_embedding:
-      n_params -= self.embed_tokens.weight.numel()
-      if self.lm_head.weight is not self.embed_tokens.weight:  # if no weight tying
-        n_params -= self.lm_head.weight.numel()
+      if self.cfg.tie_embeddings:
+        n_params = total
+      else:
+        n_params = total - embedding_size
     return n_params

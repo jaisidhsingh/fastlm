@@ -5,6 +5,7 @@ import wandb
 from transformers import AutoConfig, AutoModelForCausalLM
 
 from src.models.to_hf import HFModelConfig, HFModelForCausalLM
+from src.models.transformer import ModelConfig, Transformer
 
 # registration
 AutoConfig.register(
