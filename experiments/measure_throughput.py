@@ -134,6 +134,8 @@ def main(argv):
 
       if stop:
         print_master(' ')
+        train_loss_final_str = f'Train loss at 40 steps: {train_loss_array[-1]}'
+        print_master(train_loss_final_str)
         for k, v in parse_throughput_metrics(throughput_metrics, cfg, world_size).items():
           print_master(f'{k} \t {v}')
 
