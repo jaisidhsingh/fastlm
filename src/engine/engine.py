@@ -69,25 +69,15 @@ def _move_to_device(batch, seq_len, device, intra_doc_masking, use_flex_attentio
 
   inputs = batch['input_ids'][:, :seq_len]  # WE WILL CHOP OFF THE LAST ONE FROM THE LOGITS
   targets = batch['input_ids'][:, 1:seq_len]  # WE ALWAYS MAKE LABELS FROM INPUTS: HF-STYLE
-  # if seq_len == batch['input_ids'].shape[-1]:
-  #   targets = batch['input_ids'][:, 1:]
-  # else:
-  #   targets = batch['input_ids'][:, 1 : (seq_len + 1)]
 
   if intra_doc_masking:
-    # === Attention mask for softmax attention ===
     if use_flex_attention:
-      # Build a compiled block-diagonal causal mask via flex_attention.
-      # This is functionally identical to the dense mask below but FlashAttention-compatible.
       attn_mask = _build_flex_block_mask(batch['docs_lengths'], seq_len, device)
     else:
-      # build one mask per example and stack into (bsz, L, L)
       masks = [intra_doc_causal_mask(doc_lengths, seq_len + 1, device) for doc_lengths in batch['docs_lengths']]
       attn_mask = torch.stack(masks, dim=0)  # (bsz, L+1, L+1)
       attn_mask = attn_mask[:, :seq_len, :seq_len].contiguous()  # (bsz, L, L)
 
-    # === Linear attention mask and cu_seqlens (for GatedDeltaNet, always needed in hybrid models) ===
-    # masking and cu_seqlens for linear attention
     linear_mask_info = [
       intra_doc_masking_linear(doc_lengths, seq_len + 1, device) for doc_lengths in batch['docs_lengths']
     ]
@@ -111,7 +101,6 @@ def _move_to_device(batch, seq_len, device, intra_doc_masking, use_flex_attentio
 
   else:
     if use_flex_attention:
-      # No mask needed: GatedAttention will use F.sdpa with is_causal=True (enables FlashAttention)
       attn_mask = None
     else:
       attn_mask = (
@@ -121,13 +110,11 @@ def _move_to_device(batch, seq_len, device, intra_doc_masking, use_flex_attentio
     cu_seqlens = None
 
   if 'cuda' in device:
-    # pin arrays allows to move them to GPU asynchronously (non_blocking=True)
     inputs = inputs.pin_memory().to(device, non_blocking=True)
     targets = targets.pin_memory().to(device, non_blocking=True)
   else:
     inputs, targets = inputs.to(device), targets.to(device)
 
-  # Only move dense tensor masks to device; BlockMask is already on the correct device
   if attn_mask is not None and isinstance(attn_mask, torch.Tensor):
     attn_mask = attn_mask.to(device=device)
 
@@ -135,11 +122,6 @@ def _move_to_device(batch, seq_len, device, intra_doc_masking, use_flex_attentio
 
 
 class TorchEngine(torch.nn.Module):
-  """
-  A module containing model, optimizer, scheduler, grad scaler.
-  Wraps together a training step. Takes care of grad accumulation.
-  """
-
   def __init__(self, model, cfg, device, local_rank, ckpt):
     super().__init__()
 

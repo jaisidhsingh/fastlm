@@ -87,16 +87,35 @@ SCALING_LADDER = {
   'throughput_analysis_steps': 100,
 }
 
-SCALING_RESULTS_FOLDER = '/fast/jsingh/projects/fastlm/june/results/'
+SCALING_RESULTS_FOLDER = {
+  'mpi': '/fast/jsingh/projects/fastlm/june/results/',
+  'capella': '/data/horse/ws/jasi149i-fastlm/results',
+  'alpha': '/data/horse/ws/jasi149i-fastlm/results',
+}
 
-ANALYSIS_RESULTS_FOLDER = '/home/jsingh/projects/fastlm/drawings/analyses'
+LR_FLOAT_TO_STR_MAP = {0.00025: '25e-5', 0.0005: '5e-4', 0.001: '1e-3', 0.002: '2e-3', 0.004: '4e-3', 0.008: '8e-3'}
+PARAM_SCALE_ID_TO_MEM_MAP = {'20M': 32, '50M': 64, '150M': 72, '300M': 96}
+TOKENIZERS = {
+  'mpi': '/fast/jsingh/saved_tokenizers/better-gpt2',
+  'capella': '/data/horse/ws/jasi149i-fastlm/tokenizers/gpt2',
+  'alpha': '/data/horse/ws/jasi149i-fastlm/tokenizers/gpt2',
+}
+DATA_PREFIXES = {
+  'mpi': '/fast/jsingh/data',
+  'capella': '/data/horse/ws/jasi149i-fastlm/data',
+  'alpha': '/data/horse/ws/jasi149i-fastlm/data',
+}
+WANDB_DIR_PREFIXES = {
+  'mpi': '/fast/jsingh/projects/fastlm/wandb_logs/june/better',
+  'capella': '/data/horse/ws/jasi149i-fastlm/wandb_logs',
+  'alpha': '/data/horse/ws/jasi149i-fastlm/wandb_logs',
+}
 
 DEFAULT_CONFIG = {
   'deterministic': False,
   'seed': 123,
   'measure_throughput': False,
-  # DATA
-  'trainset_path': '/fast/jsingh/data/nemotron-cc-sample-mtsynth/tokenized_gpt2/ctx_2048/train',
+  'trainset_path': 'nemotron-cc-sample-mtsynth/tokenized_gpt2/ctx_2048/train',
   'vocab_size': 50304,
   'seq_len': 2048,
   'intra_doc_masking': True,
@@ -104,7 +123,7 @@ DEFAULT_CONFIG = {
   'sampler_seed': None,
   'num_workers': 4,
   'eval': True,
-  'validset_path': '/fast/jsingh/data/nemotron-cc-sample-mtsynth/tokenized_gpt2/ctx_2048/valid',
+  'validset_path': 'nemotron-cc-sample-mtsynth/tokenized_gpt2/ctx_2048/valid',
   'num_evals': 20,
   'eval_every_steps': -1,
   # MODEL
@@ -158,7 +177,7 @@ DEFAULT_CONFIG = {
   'wandb_mode': 'offline',
   'wandb_project': 'hparam-sweep',
   'wandb_entity': 'msc-thesis-jaisidh',
-  'wandb_dir': '/fast/jsingh/projects/fastlm/wandb_logs/june/better',
+  'wandb_dir': 'some_wandb_dir_location',
   'wandb_run_name': 'attn-20M_gbs-32',
   'exp_name': 'attn-20M_gbs-32',
   # RESUME
