@@ -32,7 +32,7 @@ export TRITON_CACHE_DIR=$triton_cache
 export TORCHINDUCTOR_CACHE_DIR=$inductor_cache
 
 # Execute python script
-cd /projects/p_neurasearch/alphafastlm
+cd /projects/p_neurasearch/fastlm
 srun torchrun \
     --nnodes=$SLURM_NNODES \
     --nproc_per_node=8 \

@@ -272,7 +272,7 @@ queue $(n_jobs)
 
   elif cfg.cluster_id == 'alpha':
     return f"""#!/bin/bash
-#SBATCH --job-name=alphafastlm
+#SBATCH --job-name=somejobname
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task={cpus}

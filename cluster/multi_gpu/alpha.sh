@@ -26,7 +26,7 @@ export TRITON_CACHE_DIR=$triton_cache
 export TORCHINDUCTOR_CACHE_DIR=$inductor_cache
 
 # Execute python script
-cd /projects/p_neurasearch/alphafastlm
+cd /projects/p_neurasearch/fastlm
 torchrun --nproc_per_node=$DP -m experiments.train \
   --config=$CONFIG \
   --job_idx=$SLURM_ARRAY_TASK_ID \
