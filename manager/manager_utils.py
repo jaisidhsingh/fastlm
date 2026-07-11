@@ -181,8 +181,6 @@ def get_train_config_content(cfg, lr):
 def get_eval_config_content(cfg, lr, benchmarks):
   mixer, ratio = parse_arch_id(cfg.arch_id)
 
-  # raw ckpt path
-
   lr_str = str(lr).replace('.', 'p')
   raw_ckpt = os.path.join(
     SCALING_RESULTS_FOLDER['cfg.cluster_id'],
@@ -285,17 +283,17 @@ queue $(n_jobs)
 #SBATCH --job-name=somejob
 #SBATCH --output=/data/horse/ws/jasi149i-fastlm/logs/june/out/job-%A_%a.out
 #SBATCH --error=/data/horse/ws/jasi149i-fastlm/logs/june/err/job-%A_%a.err
-#SBATCH --array=0-{n_jobs - 1}
+#SBATCH --array=0-{n_jobs_minus_1}
 #SBATCH --exclude=i8009
 
 CONFIG={get_config_path(cfg, lr)}
 DP={dp}
 HOST=$(hostname -f)
 
-cd /projects/p_neurasearch/alphafastlm
+cd /projects/p_neurasearch/fastlm
 
 if [ "$DP" -eq 1 ]; then
-    bash cluster/single_gpu/slurm.sh "$CONFIG" "$SLURM_ARRAY_TASK_ID" "$SLURM_JOB_ID"
+    bash cluster/single_gpu/alpha.sh "$CONFIG" "$SLURM_ARRAY_TASK_ID" "$SLURM_JOB_ID"
 else
   if [ "$HOST" == *alpha* && "$DP" -eq 16]; then
     bash cluster/multi_gpu/alpha_multinode.sh "$CONFIG" "$SLURM_ARRAY_TASK_ID" "$SLURM_JOB_ID" "$DP"
@@ -327,7 +325,7 @@ HOST=$(hostname -f)
 cd /projects/p_neurasearch/fastlm
 
 if [ "$DP" -eq 1 ]; then
-    bash cluster/single_gpu/slurm.sh "$CONFIG" "$SLURM_ARRAY_TASK_ID" "$SLURM_JOB_ID"
+    bash cluster/single_gpu/capella.sh "$CONFIG" "$SLURM_ARRAY_TASK_ID" "$SLURM_JOB_ID"
 else
   if [ "$HOST" == *capella* && "$DP" -eq 8]; then
     bash cluster/multi_gpu/capella_multinode.sh "$CONFIG" "$SLURM_ARRAY_TASK_ID" "$SLURM_JOB_ID" "$DP"

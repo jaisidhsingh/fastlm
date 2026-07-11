@@ -2,7 +2,7 @@
 
 source /home/jasi149i/.bashrc
 source /data/horse/ws/jasi149i-fastlm/envs/pt/bin/activate
-cd /projects/p_neurasearch/alphafastlm
+cd /projects/p_neurasearch/fastlm
 
 nvidia-smi
 module load CUDA/13.0.0
