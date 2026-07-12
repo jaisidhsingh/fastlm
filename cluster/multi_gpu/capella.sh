@@ -13,6 +13,8 @@ SLURM_ARRAY_TASK_ID=$2
 SLURM_JOB_ID=$3
 DP=$4
 
+cluster_id="capella"
+
 mp_cache="/tmp/mp/${SLURM_JOB_ID}_${SLURM_ARRAY_TASK_ID}"
 wandb_cache="/tmp/wandb/${SLURM_JOB_ID}_${SLURM_ARRAY_TASK_ID}"
 triton_cache="/tmp/triton/${SLURM_JOB_ID}_${SLURM_ARRAY_TASK_ID}"
@@ -30,6 +32,7 @@ cd /projects/p_neurasearch/fastlm
 torchrun --nproc_per_node=$DP -m experiments.train \
   --config=$CONFIG \
   --job_idx=$SLURM_ARRAY_TASK_ID \
-  --job_cluster=$SLURM_JOB_ID
+  --job_cluster=$SLURM_JOB_ID \
+  --cluster_id=$cluster_id;
 
 rm -rf $mp_cache $wandb_cache $triton_cache $inductor_cache

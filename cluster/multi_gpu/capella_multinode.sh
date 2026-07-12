@@ -16,6 +16,8 @@ DP=$4
 MASTER_ADDR=$(scontrol show hostnames $SLURM_JOB_NODELIST | head -n 1)
 MASTER_PORT=29500
 
+cluster_id="capella"
+
 mp_cache="/data/horse/ws/jasi149i/tmp/mp/${SLURM_JOB_ID}_${SLURM_ARRAY_TASK_ID}"
 wandb_cache="/data/horse/ws/jasi149i/tmp/wandb/${SLURM_JOB_ID}_${SLURM_ARRAY_TASK_ID}"
 triton_cache="/data/horse/ws/jasi149i/tmp/triton/${SLURM_JOB_ID}_${SLURM_ARRAY_TASK_ID}"
@@ -42,4 +44,7 @@ srun torchrun \
     -m experiments.train \
     --config=$CONFIG \
     --job_idx=$SLURM_ARRAY_TASK_ID \
-    --job_cluster=$SLURM_JOB_ID;
+    --job_cluster=$SLURM_JOB_ID \
+    --cluster_id=$cluster_id;
+
+rm -rf $mp_cache $wandb_cache $triton_cache $inductor_cache

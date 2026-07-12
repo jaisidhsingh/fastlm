@@ -22,16 +22,18 @@ from src.utils.torch_utils import destroy_ddp, pytorch_setup
 flags.DEFINE_string('config', 'src/config/cfg_test.yaml', 'Path to config.yaml file.')
 flags.DEFINE_integer('job_idx', None, 'Job idx for job-array sweeps. From 0 to n-1.')
 flags.DEFINE_integer('job_cluster', None, 'Job cluster ID.')
+flags.DEFINE_string('cluster_id', None, 'Which cluster are we running things on?')
 FLAGS = flags.FLAGS
 
 
 def main(argv):
   CFG_PATH = FLAGS.config
+  CLUSTER_ID = FLAGS.cluster_id
   cfg, _ = utils.load_config(CFG_PATH)
 
   local_rank, world_size, device, master_process = pytorch_setup(cfg)
   utils.set_arch(cfg)
-  utils.set_batch_sizes(cfg, world_size)
+  utils.set_batch_sizes(cfg, world_size, CLUSTER_ID)
   utils.set_token_budget_id_from_gbs(cfg)
 
   print_master(f'Training an {cfg.arch_id.upper()} [{cfg.param_scale_id}] LLM on {cfg.token_budget_id} tokens.')

@@ -41,8 +41,8 @@ def set_eval_every(cfg):
   cfg.eval_every_steps = max(1, int(cfg.steps_budget // cfg.num_evals))
 
 
-def set_batch_sizes(cfg, world_size):
-  peak_mbs = SCALING_LADDER['models'][cfg.param_scale_id]['peak_mbs']
+def set_batch_sizes(cfg, world_size, cluster_id):
+  peak_mbs = SCALING_LADDER['models'][cfg.param_scale_id]['peak_mbs'][cluster_id]
   req_mbs = int(cfg.global_batch_size // world_size)
 
   if req_mbs > peak_mbs:
