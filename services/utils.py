@@ -87,9 +87,7 @@ def difference(i1: Inventory, i2: Inventory) -> pd.DataFrame | None:
   return None if result.empty else result
 
 
-def take_inventory(cluster_id, save_format: str = 'csv'):
-  assert save_format in ['csv', 'json'], 'Received unsupported value of `save_format`.'
-
+def take_inventory(cluster_id):
   base_root = SCALING_RESULTS_FOLDER[cluster_id]
   root = Path(base_root)
 
@@ -126,12 +124,6 @@ def take_inventory(cluster_id, save_format: str = 'csv'):
       )
       inventory.push(artifact_state)
 
-  save_path = os.path.join(
-    PROJECT_REPO_ROOT[cluster_id], 'services', 'inventories', f'{cluster_id}_inventory.{save_format}'
-  )
-  inventory.save(save_path, format=save_format)
-  print(f'Updated artifact inventory on cluster {cluster_id} at path:\n{save_path}')
-
   return inventory
 
 
@@ -142,6 +134,7 @@ def get_checkpoints_from_changes(changes: pd.DataFrame, cluster_id: str) -> defa
   for i in range(len(changes)):
     src_folder = os.path.join(
       base_folder,
+      str(changes[i]['arch_id']),
       str(changes[i]['n']),
       'gbs_wise_results',
       f'gbs_{changes[i]["gbs"]}',
@@ -155,7 +148,6 @@ def get_checkpoints_from_changes(changes: pd.DataFrame, cluster_id: str) -> defa
     paths['metrics_src'].append(src_metrics_path)
 
     dest_folder = os.path.join(
-      base_folder,
       str(changes[i]['n']),
       f'gbs_{changes[i]["gbs"]}',
       f'lr_{str(changes[i]["lr"]).replace(".", "p")}',
@@ -166,5 +158,7 @@ def get_checkpoints_from_changes(changes: pd.DataFrame, cluster_id: str) -> defa
 
     dest_metrics_path = os.path.join(dest_folder, f'metrics_decayed_to_{changes[i]["d"].replace(".", "p")}.json')
     paths['metrics_dest'].append(dest_metrics_path)
+
+    paths['dest_repo'].append(f'OpenThesis_{changes[i]["arch_id"]}')
 
   return paths
