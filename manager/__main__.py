@@ -35,7 +35,7 @@ class ManagerConfig:
 
 
 def check_subfolders(cfg: ManagerConfig):
-  folder = os.path.join(get_cluster_prefix(cfg.cluster_id), 'execs')
+  folder = os.path.join(get_cluster_prefix(cfg.cluster_id), 'fastlm', 'execs')
   os.makedirs(os.path.join(folder, cfg.arch_id), exist_ok=True)
   os.makedirs(os.path.join(folder, cfg.arch_id, cfg.n), exist_ok=True)
 

@@ -124,7 +124,14 @@ def get_train_config_content(cfg, lr):
   # data
   base_cfg['trainset_path'] = os.path.join(DATA_PREFIXES[cfg.cluster_id], base_cfg['trainset_path'])
   base_cfg['validset_path'] = os.path.join(DATA_PREFIXES[cfg.cluster_id], base_cfg['validset_path'])
-  base_cfg['num_workers'] = 16 if cfg.cluster_id == 'mpi' else 8
+  if cfg.cluster_id == 'mpi':
+    base_cfg['num_workers'] = 16
+  elif cfg.cluster_id == 'capella':
+    base_cfg['num_workers'] = 8
+  elif cfg.cluster_id == 'alpha':
+    base_cfg['num_workers'] = 4
+  else:
+    raise ValueError('Found unsupported value of `--cluster_id`.')
 
   # batch size
   base_cfg['global_batch_size'] = cfg.gbs
