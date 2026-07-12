@@ -32,3 +32,6 @@ manager_check/
 
 # Ignore logistic folders
 trash/
+
+# Other random stuff
+tea_debug.log
