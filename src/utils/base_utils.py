@@ -19,15 +19,22 @@ FLAGS = flags.FLAGS
 
 
 def parse_arch_id(arch_id: str) -> tp.Tuple[str, int]:
-  # for example:
-  #   pure attention: arch_id = "attn"
-  #   pure gdn: arch_id = "gdn"
-  #   hybrid with gdn:attn = r:1 : arch_id = "hybrid_r-1"
+  """
+  - pure attention corresponds to `arch_id = "attn"`
+  - pure gdn corresponds to `arch_id = "gdn"`
+  - hybrid with gdn:attn = x:1 corresponds to `arch_id: "gdn+attn_x-1"`
+  - hybrid with gdn:attn = 1:x corresponds to `arch_id: "gdn+attn_1-x"`
+  """
   split_id = arch_id.split('_')
   arch = split_id[0]
   ratio = 1
   if len(split_id) == 2:
-    ratio = int(split_id[1].split('-')[0])
+    [r1, r2] = [int(x) for x in split_id[1].split('-')]
+    if r2 == 1:  # spec follows x:1 format
+      ratio = r1
+    else:  # spec follows 1:x format
+      assert r1 == 1, 'Hybridisation ratio specified incorrectly'
+      ratio = int(-1 * r2)  # negative value of ratio handled in `Transformer._prepare_layers`
   return arch, ratio
 
 

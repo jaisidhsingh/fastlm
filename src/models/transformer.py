@@ -143,12 +143,24 @@ class Transformer(nn.Module):
         f'Unknown token mixer(s) {token_mixers}, supported: {list(SUPPORTED_TOKEN_MIXERS.keys())}'
       )
       layers = []
+
       for idx in range(cfg.n_layers):
-        if (idx + 1) % (cfg.hybrid_mixer_ratio + 1) == 0:
-          token_mixer_type = token_mixers[-1]
+        if cfg.hybrid_mixer_ratio > 0:  # spec is x:1, where x >= 1
+          if (idx + 1) % (cfg.hybrid_mixer_ratio + 1) == 0:
+            token_mixer_type = token_mixers[-1]
+          else:
+            token_mixer_type = token_mixers[0]
+          layers.append(Block(idx, token_mixer_type, cfg))
+
+        elif cfg.hybrid_mixer_ratio < 0:  # spec is 1:x, where x >= 1
+          if idx % (abs(cfg.hybrid_mixer_ratio) + 1) == 0:
+            token_mixer_type = token_mixers[0]
+          else:
+            token_mixer_type = token_mixers[-1]
+          layers.append(Block(idx, token_mixer_type, cfg))
+
         else:
-          token_mixer_type = token_mixers[0]
-        layers.append(Block(idx, token_mixer_type, cfg))
+          raise ValueError('Attribute `hybrid_mixer_ratio` of `ModelConfig` cannot be 0. Check your `arch_id`.')
 
     else:
       layers = []
