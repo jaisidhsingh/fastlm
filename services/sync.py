@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 import torch
 import tyro
+from huggingface_hub import HfApi
 
 # 0. before every run, we make a `git pull` to update inventories
 # 1. after each run, we want to take inventory on the cluster the run finished on.
@@ -12,6 +13,16 @@ import tyro
 # 4. else if there was a change to an existing (N,D,GBS,LR,rho) on the cluster, upload->overwrite.
 # 5. otherwise do nothing (run was not supposed to generate any artifacts)
 # 6. finally, make a `git push`
+
+
+def dummy_upload():
+  api = HfApi()
+  api.upload_file(
+    path_or_fileobj='/path/to/model.pt',
+    path_in_repo='data/model.pt',
+    repo_id='username/my-dataset',
+    repo_type='dataset',
+  )
 
 
 class SyncServiceConfig:

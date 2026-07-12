@@ -108,11 +108,15 @@ SCALING_LADDER = {
 }
 
 SCALING_RESULTS_FOLDER = {
-  'mpi': '/fast/jsingh/projects/fastlm/june/results/',
+  'mpi': '/fast/jsingh/projects/fastlm/june/results',
   'capella': '/data/horse/ws/jasi149i-fastlm/results',
   'alpha': '/data/horse/ws/jasi149i-fastlm/results',
 }
-
+PROJECT_REPO_ROOT = {
+  'mpi': '/home/jsingh/projects/fastlm',
+  'capella': '/projects/p_neurasearch/fastlm',
+  'alpha': '/projects/p_neurasearch/fastlm',
+}
 LR_FLOAT_TO_STR_MAP = {0.00025: '25e-5', 0.0005: '5e-4', 0.001: '1e-3', 0.002: '2e-3', 0.004: '4e-3', 0.008: '8e-3'}
 PARAM_SCALE_ID_TO_MEM_MAP = {'20M': 32, '50M': 64, '150M': 72, '300M': 96}
 TOKENIZERS = {
@@ -130,7 +134,11 @@ WANDB_DIR_PREFIXES = {
   'capella': '/data/horse/ws/jasi149i-fastlm/wandb_logs',
   'alpha': '/data/horse/ws/jasi149i-fastlm/wandb_logs',
 }
-
+TMP_FOLDER_FOR_UPLOAD = {
+  'mpi': '/fast/jsingh/projects/fastlm/hf_sync_results/tmp_storage',
+  'capella': '/data/horse/ws/jasi149i-fastlm/hf_sync_results/tmp_storage',
+  'alpha': '/data/horse/ws/jasi149i-fastlm/hf_sync_results/tmp_storage',
+}
 DEFAULT_CONFIG = {
   'deterministic': False,
   'seed': 123,
