@@ -17,10 +17,10 @@ find_errfile() {
       echo "/fast/jsingh/logs/fastlm/june/attn/err/job.${job_id}.err"
       ;;
     *capella*)
-      echo "/horse/ws/jasi149i-fastlm/logs/june/err/job-${job_id}.err"
+      echo "/data/horse/ws/jasi149i-fastlm/logs/june/err/job-${job_id}.err"
       ;;
     *alpha*)
-      echo "/horse/ws/jasi149i-fastlm/logs/june/err/job-${job_id}.err"
+      echo "/data/horse/ws/jasi149i-fastlm/logs/june/err/job-${job_id}.err"
       ;;
     *)
       return 1

@@ -1,7 +1,11 @@
 #!/bin/bash
 
 source /home/jasi149i/.bashrc
-source /data/horse/ws/jasi149i-fastlm/envs/pt/bin/activate
+# source /data/horse/ws/jasi149i-fastlm/envs/pt/bin/activate
+module load Miniconda3/25.5.1-1
+conda activate /home/jasi149i/.conda/envs/pt
+echo "Check if environment is indeed on"
+pip show torch
 cd /projects/p_neurasearch/fastlm
 
 nvidia-smi

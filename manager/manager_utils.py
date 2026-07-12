@@ -235,6 +235,8 @@ def get_train_jobfile_content(cfg, lr, n_jobs, cpus=8):
   single_or_multi = 'single' if dp == 1 else 'multi'
   mem = PARAM_SCALE_ID_TO_MEM_MAP[cfg.n]
   n_jobs_minus_1 = n_jobs - 1
+  lr_ext = get_lr_ext(lr)
+  name = f'{cfg.arch_id}_{cfg.n}_gbs-{cfg.gbs}_lr-{lr_ext}'
 
   args = '$(config) $(Process) $(Cluster)'
   if dp > 1:
@@ -280,7 +282,7 @@ queue $(n_jobs)
 #SBATCH --gres=gpu:{dp}
 #SBATCH --time=24:00:00
 #SBATCH --account=p_neurasearch
-#SBATCH --job-name=somejob
+#SBATCH --job-name={name}
 #SBATCH --output=/data/horse/ws/jasi149i-fastlm/logs/june/out/job-%A_%a.out
 #SBATCH --error=/data/horse/ws/jasi149i-fastlm/logs/june/err/job-%A_%a.err
 #SBATCH --array=0-{n_jobs_minus_1}
@@ -313,7 +315,7 @@ fi
 #SBATCH --gres=gpu:{dp}
 #SBATCH --time=24:00:00
 #SBATCH --account=p_neurasearch
-#SBATCH --job-name=somejobname
+#SBATCH --job-name={name}
 #SBATCH --output=/data/horse/ws/jasi149i-fastlm/logs/june/out/job-%A_%a.out
 #SBATCH --error=/data/horse/ws/jasi149i-fastlm/logs/june/err/job-%A_%a.err
 #SBATCH --array=0-{n_jobs_minus_1}
@@ -341,6 +343,9 @@ fi
 def get_eval_jobfile_content(cfg, lr, n_jobs, cpus=8):
   mem = PARAM_SCALE_ID_TO_MEM_MAP[cfg.n]
   n_jobs_minus_1 = n_jobs - 1
+  lr_ext = get_lr_ext(lr)
+  name = f'{cfg.arch_id}_{cfg.n}_gbs-{cfg.gbs}_lr-{lr_ext}'
+
   if cfg.cluster_id == 'mpi':
     return f"""# Executable should be a full path
 executable=/home/jsingh/projects/fastlm/cluster/single_gpu/eval_condor.sh
@@ -372,16 +377,14 @@ queue $(n_jobs)
     """
   elif cfg.cluster_id == 'alpha':
     return f"""#!/bin/bash
-#SBATCH --job-name=fastlm_eval
-#SBATCH --output=/fast/jsingh/logs/fastlm/june/eval/out/job.%A.%a.out
-#SBATCH --error=/fast/jsingh/logs/fastlm/june/eval/err/job.%A.%a.err
+#SBATCH --output=/data/horse/ws/jasi149i-fastlm/logs/june/out/job-%A_%a.out
+#SBATCH --error=/data/horse/ws/jasi149i-fastlm/logs/june/err/job-%A_%a.err
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task={cpus}
 #SBATCH --mem={mem}G
 #SBATCH --gres=gpu:1
-#SBATCH --constraint="a100-80gb|h100"
-#SBATCH --exclude=g174.internal.cluster.is.localnet
+#SBATCH --job-name={name}
 #SBATCH --array=0-{n_jobs_minus_1}
 
 EXECUTABLE=/home/jsingh/projects/fastlm/cluster/single_gpu/eval_alpha.sh
@@ -396,16 +399,14 @@ srun "$EXECUTABLE" "$CONFIG" "$SLURM_ARRAY_TASK_ID" "$SLURM_JOB_ID"
 
   elif cfg.cluster_id == 'capella':
     return f"""#!/bin/bash
-#SBATCH --job-name=fastlm_eval
-#SBATCH --output=/fast/jsingh/logs/fastlm/june/eval/out/job.%A.%a.out
-#SBATCH --error=/fast/jsingh/logs/fastlm/june/eval/err/job.%A.%a.err
+#SBATCH --output=/data/horse/ws/jasi149i-fastlm/logs/june/out/job-%A_%a.out
+#SBATCH --error=/data/horse/ws/jasi149i-fastlm/logs/june/err/job-%A_%a.err
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task={cpus}
 #SBATCH --mem={mem}G
 #SBATCH --gres=gpu:1
-#SBATCH --constraint="a100-80gb|h100"
-#SBATCH --exclude=g174.internal.cluster.is.localnet
+#SBATCH --job-name={name}
 #SBATCH --array=0-{n_jobs_minus_1}
 
 EXECUTABLE=/home/jsingh/projects/fastlm/cluster/single_gpu/eval_capella.sh

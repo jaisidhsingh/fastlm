@@ -17,10 +17,10 @@ find_logfile() {
       echo "/fast/jsingh/logs/fastlm/june/attn/out/job.${job_id}.out"
       ;;
     *capella*)
-      echo "/horse/ws/jasi149i-fastlm/logs/june/out/job-${job_id}.out"
+      echo "/data/horse/ws/jasi149i-fastlm/logs/june/out/job-${job_id}.out"
       ;;
     *alpha*)
-      echo "/horse/ws/jasi149i-fastlm/logs/june/out/job-${job_id}.out"
+      echo "/data/horse/ws/jasi149i-fastlm/logs/june/out/job-${job_id}.out"
       ;;
     *)
       return 1
