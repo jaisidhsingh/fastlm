@@ -29,7 +29,7 @@ cd $PROJECT
 
 arch_id=("attn")
 n=("20M")
-gbs=(32)
+gbs=(16)
 lr="0.001,"
 mode="main"
 bid=100

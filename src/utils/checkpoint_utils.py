@@ -66,7 +66,7 @@ def create_save_steps(cfg, world_size):
   return None, None
 
 
-def save_checkpoint(step, model, engine, cfg, metrics, name, world_size):
+def save_checkpoint(step, model, engine, cfg, metrics, name, world_size, cluster_id):
   optimizer = engine.optimizer
   scheduler = engine.scheduler
   scaler = engine.scaler
@@ -89,7 +89,7 @@ def save_checkpoint(step, model, engine, cfg, metrics, name, world_size):
     'scaler': scaler.state_dict() if save_scaler else None,
   }
 
-  save_folder = utils.get_exp_dir_path(cfg, world_size)
+  save_folder = utils.get_exp_dir_path(cfg, world_size, cluster_id)
   os.makedirs(save_folder, exist_ok=True)
 
   # Add info about the step at which we are saving
@@ -105,11 +105,11 @@ def save_checkpoint(step, model, engine, cfg, metrics, name, world_size):
     json.dump(dict(metrics), f)
 
 
-def maybe_load_checkpoint(cfg, world_size):
+def maybe_load_checkpoint(cfg, world_size, cluster_id):
   ckpt = None
 
   if cfg.resume:
-    save_folder = utils.get_exp_dir_path(cfg, world_size)
+    save_folder = utils.get_exp_dir_path(cfg, world_size, cluster_id)
     if cfg.cooldown_only:
       print('Only cooling down the learning rate.')
       ckpt_path = os.path.join(save_folder, f'ckpt_decay_starts_to_{cfg.token_budget_id.replace(".", "p")}.pt')
@@ -122,11 +122,11 @@ def maybe_load_checkpoint(cfg, world_size):
   return ckpt
 
 
-def load_metrics_from_checkpoint(cfg, world_size):
+def load_metrics_from_checkpoint(cfg, world_size, cluster_id):
   ckpt = None
 
   if cfg.resume:
-    save_folder = utils.get_exp_dir_path(cfg, world_size)
+    save_folder = utils.get_exp_dir_path(cfg, world_size, cluster_id)
     ckpt_path = os.path.join(save_folder, f'metrics_{cfg.resume_exp_name}.json')
     with open(ckpt_path) as f:
       ckpt = json.load(f)

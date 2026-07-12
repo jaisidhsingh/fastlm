@@ -7,6 +7,7 @@ from absl import app, flags
 from torch.utils.flop_counter import FlopCounterMode
 
 from src import utils
+from src.data import get_dataloaders
 from src.engine import TorchEngine
 from src.models import construct_model
 from src.utils.base_utils import print_master
@@ -28,12 +29,12 @@ FLAGS = flags.FLAGS
 
 def main(argv):
   CFG_PATH = FLAGS.config
-  CLUSTER_ID = FLAGS.cluster_id
+  cluster_id = FLAGS.cluster_id
   cfg, _ = utils.load_config(CFG_PATH)
 
   local_rank, world_size, device, master_process = pytorch_setup(cfg)
   utils.set_arch(cfg)
-  utils.set_batch_sizes(cfg, world_size, CLUSTER_ID)
+  utils.set_batch_sizes(cfg, world_size, cluster_id)
   utils.set_token_budget_id_from_gbs(cfg)
 
   print_master(f'Training an {cfg.arch_id.upper()} [{cfg.param_scale_id}] LLM on {cfg.token_budget_id} tokens.')
@@ -46,7 +47,7 @@ def main(argv):
     utils.log_job_info()
 
   # Load checkpoint
-  ckpt = maybe_load_checkpoint(cfg, world_size)
+  ckpt = maybe_load_checkpoint(cfg, world_size, cluster_id)
   if ckpt is not None:
     cfg.resume_step = ckpt['step']
 
@@ -106,7 +107,7 @@ def main(argv):
   # Bookkeeping
   metrics = defaultdict(list)
   if ckpt is not None:
-    metrics = defaultdict(list, load_metrics_from_checkpoint(cfg, world_size))
+    metrics = defaultdict(list, load_metrics_from_checkpoint(cfg, world_size, cluster_id))
 
   train_loss_array = []
   throughput_ctx = ThroughputMeasurement(cfg, engine.model) if cfg.measure_throughput else nullcontext()
@@ -142,7 +143,7 @@ def main(argv):
 
     # Log
     if master_process and step % cfg.log_every_steps == 0 and is_step:
-      throughput_metrics = throughput_ctx.get_metrics()
+      throughput_metrics = throughput_ctx.get_metrics() if isinstance(throughput_ctx, ThroughputMeasurement) else None
 
       utils.log(
         cfg,
@@ -160,12 +161,12 @@ def main(argv):
     # Checkpoint
     if master_process and is_step and step in save_points and cfg.save_intermediate_checkpoints:
       save_name = save_points[step]
-      save_checkpoint(step, model, engine, cfg, metrics, save_name, world_size)
+      save_checkpoint(step, model, engine, cfg, metrics, save_name, world_size, cluster_id)
 
   # End of training: log and save checkpoint
   print_master('=== Training Completed! ===')
   if master_process and cfg.save_last_checkpoint:
-    save_checkpoint(step, model, engine, cfg, metrics, 'end_of_training_backup', world_size)
+    save_checkpoint(step, model, engine, cfg, metrics, 'end_of_training_backup', world_size, cluster_id)
 
   # DDP slaughtering
   destroy_ddp()

@@ -38,6 +38,8 @@ def main(argv):
   cfg, _ = utils.load_config(CFG_PATH)
   setup(cfg.seed)
 
+  cfg.measure_throughput = True
+
   if FLAGS.use_flex == 'no':
     cfg.use_flex_attention = False
   else:
@@ -92,7 +94,7 @@ def main(argv):
 
   metrics = defaultdict(list)
   if ckpt is not None:
-    metrics = defaultdict(list, load_metrics_from_checkpoint(cfg, world_size))
+    metrics = defaultdict(list, load_metrics_from_checkpoint(cfg, world_size, cluster_id))
 
   train_loss_array = []
   throughput_ctx = (

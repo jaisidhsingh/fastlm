@@ -161,9 +161,11 @@ def _matching_wandb_run_exists(cfg):
   return False
 
 
-def get_exp_dir_path(cfg, world_size):
+def get_exp_dir_path(cfg, world_size, cluster_id):
   gbs = int(cfg.micro_batch_size * cfg.grad_accumulation_steps * world_size)
-  gbs_folder = os.path.join(SCALING_RESULTS_FOLDER, cfg.arch_id, cfg.param_scale_id, 'gbs_wise_results', f'gbs_{gbs}')
+  gbs_folder = os.path.join(
+    SCALING_RESULTS_FOLDER[cluster_id], cfg.arch_id, cfg.param_scale_id, 'gbs_wise_results', f'gbs_{gbs}'
+  )
   exp_folder = os.path.join(gbs_folder, 'checkpoints', f'lr_{str(cfg.lr).replace(".", "p")}')
   os.makedirs(exp_folder, exist_ok=True)
   return exp_folder
