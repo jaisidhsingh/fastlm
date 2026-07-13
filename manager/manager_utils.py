@@ -322,6 +322,7 @@ fi
 #SBATCH --gres=gpu:{dp}
 #SBATCH --time=24:00:00
 #SBATCH --account=p_neurasearch
+#SBATCH --exclude=c4
 #SBATCH --job-name={name}
 #SBATCH --output=/data/horse/ws/jasi149i-fastlm/logs/june/out/job-%A_%a.out
 #SBATCH --error=/data/horse/ws/jasi149i-fastlm/logs/june/err/job-%A_%a.err
@@ -413,6 +414,7 @@ srun "$EXECUTABLE" "$CONFIG" "$SLURM_ARRAY_TASK_ID" "$SLURM_JOB_ID"
 #SBATCH --cpus-per-task={cpus}
 #SBATCH --mem={mem}G
 #SBATCH --gres=gpu:1
+#SBATCH --exclude=c4
 #SBATCH --job-name={name}
 #SBATCH --array=0-{n_jobs_minus_1}
 
