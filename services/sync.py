@@ -26,11 +26,6 @@ class SyncServiceConfig:
   cluster_id: str  # one of: mpi, capella, alpha
 
 
-# ---------------------------------------------------------------------------
-# Step 2: load canonical HF inventory from GitHub-tracked JSON
-# ---------------------------------------------------------------------------
-
-
 def load_hf_state() -> Inventory:
   """Load the canonical HF inventory from the locally-tracked JSON file.
 
@@ -45,11 +40,6 @@ def load_hf_state() -> Inventory:
   return hf_inventory
 
 
-# ---------------------------------------------------------------------------
-# Step 4a: ensure the HF dataset repo exists
-# ---------------------------------------------------------------------------
-
-
 def ensure_hf_repo_exists(api: HfApi, arch_id: str) -> str:
   """Make sure the HF dataset repo for `arch_id` exists; create it if not.
 
@@ -59,11 +49,6 @@ def ensure_hf_repo_exists(api: HfApi, arch_id: str) -> str:
   print(f'Ensuring HF repo exists: {repo_id} ...')
   api.create_repo(repo_id=repo_id, repo_type='dataset', exist_ok=True)
   return repo_id
-
-
-# ---------------------------------------------------------------------------
-# Step 4b: extract state_dict from a full checkpoint into a temp file
-# ---------------------------------------------------------------------------
 
 
 def extract_model_state_dict_to_tmpfile(checkpoint_path: str, cluster_id: str) -> str:
@@ -85,11 +70,6 @@ def extract_model_state_dict_to_tmpfile(checkpoint_path: str, cluster_id: str) -
   return tmpfile_path
 
 
-# ---------------------------------------------------------------------------
-# Step 4c/4d: upload a single file to HF
-# ---------------------------------------------------------------------------
-
-
 def upload_file_to_hf(api: HfApi, repo_id: str, src_path: str, dest_path: str) -> None:
   """Upload a single file to a HuggingFace dataset repo."""
   print(f'  Uploading {src_path}  ->  {repo_id}/{dest_path}')
@@ -99,11 +79,6 @@ def upload_file_to_hf(api: HfApi, repo_id: str, src_path: str, dest_path: str) -
     repo_id=repo_id,
     repo_type='dataset',
   )
-
-
-# ---------------------------------------------------------------------------
-# Step 5: append uploaded entries to the canonical HF inventory
-# ---------------------------------------------------------------------------
 
 
 def update_hf_inventory(uploaded_entries: pd.DataFrame) -> None:
@@ -131,11 +106,6 @@ def update_hf_inventory(uploaded_entries: pd.DataFrame) -> None:
   print(f'Updated HF inventory: {len(hf_inventory)} total entries at {_HF_INVENTORY_PATH}')
 
 
-# ---------------------------------------------------------------------------
-# Step 6: save a local snapshot for audit
-# ---------------------------------------------------------------------------
-
-
 def save_local_snapshot(local_inventory: Inventory, cluster_id: str) -> None:
   """Save the full local inventory to a per-cluster snapshot file."""
   snapshot_path = os.path.join(_INVENTORIES_DIR, f'local_inventory_{cluster_id}.json')
@@ -144,25 +114,16 @@ def save_local_snapshot(local_inventory: Inventory, cluster_id: str) -> None:
   print(f'Saved local snapshot ({len(local_inventory)} entries) to {snapshot_path}')
 
 
-# ---------------------------------------------------------------------------
-# Main orchestration
-# ---------------------------------------------------------------------------
-
-
 def main(cfg: SyncServiceConfig) -> None:
   cluster_id = cfg.cluster_id
 
   # Step 1: take inventory of the cluster
-  print(f'\n=== Step 1: Taking inventory of cluster "{cluster_id}" ===')
   local_inventory = take_inventory(cluster_id)
-  print(f'Found {len(local_inventory)} artifacts on cluster "{cluster_id}".')
 
   # Step 2: load canonical HF state
-  print('\n=== Step 2: Loading HF state ===')
   hf_inventory = load_hf_state()
 
   # Step 3: diff
-  print('\n=== Step 3: Comparing inventories ===')
   changes = difference(local_inventory, hf_inventory)
   if changes is None:
     print('No new or modified artifacts found — nothing to upload.')
@@ -179,7 +140,7 @@ def main(cfg: SyncServiceConfig) -> None:
 
   try:
     # Step 4 loop — upload each artifact
-    print('\n=== Step 4: Uploading artifacts to HuggingFace ===')
+    print('Uploading artifacts to HuggingFace...')
     for i in range(num_changes):
       arch_id = str(changes.iloc[i]['arch_id'])
       ckpt_src = upload_paths['checkpoints_src'][i]
@@ -208,10 +169,10 @@ def main(cfg: SyncServiceConfig) -> None:
         raise FileNotFoundError(f'Metrics file not found: {metrics_src}')
       upload_file_to_hf(api, repo_id, metrics_src, metrics_dest)
 
-      print(f'  ✓ Uploaded {arch_id} artifact successfully.')
+      print(f'Uploaded artifact successfully.')
 
     # Step 5: update HF inventory (only after all uploads succeed)
-    print('\n=== Step 5: Updating HF inventory ===')
+    print('Updating HF inventory')
     update_hf_inventory(changes)
 
   except Exception as e:
@@ -227,11 +188,8 @@ def main(cfg: SyncServiceConfig) -> None:
         print(f'Cleaned up temp file: {tmp_file}')
 
   # Step 6: save local inventory snapshot
-  print('\n=== Step 6: Saving local snapshot ===')
   save_local_snapshot(local_inventory, cluster_id)
-
-  print('\n=== Sync complete! ===')
-  print('Remember to: git add services/inventories/ && git commit && git push')
+  print('Sync complete!')
 
 
 if __name__ == '__main__':

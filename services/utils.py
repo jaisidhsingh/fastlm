@@ -6,10 +6,12 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 import pandas as pd
+from beartype import beartype
 
 from src.constants import SCALING_RESULTS_FOLDER
 
 
+@beartype
 @dataclass
 class ArtifactState:
   arch_id: str
