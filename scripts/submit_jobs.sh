@@ -27,11 +27,11 @@ echo $CLUSTER_ID $PROJECT
 
 cd $PROJECT
 
-arch_id=("attn")
+arch_id=("gdn+attn_1-1")
 n=("300M")
-gbs=(64)
-lr="0.0005,"
-mode="main"
+gbs=(32)
+lr="0.004,"
+mode="decay"
 bid=100
 submit="yes"
 routine="train"
