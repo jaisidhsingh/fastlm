@@ -110,7 +110,9 @@ def main(argv):
     metrics = defaultdict(list, load_metrics_from_checkpoint(cfg, world_size, cluster_id))
 
   train_loss_array = []
-  throughput_ctx = ThroughputMeasurement(cfg, engine.model) if cfg.measure_throughput else nullcontext()
+  throughput_ctx = (
+    ThroughputMeasurement(cfg, engine.model, non_embed_params) if cfg.measure_throughput else nullcontext()
+  )
 
   # Training
   for micro_step, micro_batch in enumerate(trainloader, micro_step_start + 1):

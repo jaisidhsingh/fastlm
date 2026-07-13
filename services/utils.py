@@ -1,17 +1,15 @@
 import json
 import os
-import typing as tp
+import time
 from collections import defaultdict
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
 import pandas as pd
-from beartype import beartype
 
-from src.constants import PROJECT_REPO_ROOT, SCALING_RESULTS_FOLDER
+from src.constants import SCALING_RESULTS_FOLDER
 
 
-@beartype
 @dataclass
 class ArtifactState:
   arch_id: str
@@ -22,6 +20,7 @@ class ArtifactState:
   checkpoint_filename: str
   metrics_filename: str
   cluster_location: str
+  mtime_spec: str
 
 
 class Inventory:
@@ -29,6 +28,8 @@ class Inventory:
     self.data = defaultdict(list) if data is None else data
 
   def __len__(self):
+    if not self.data:
+      return 0
     k = list(self.data.keys())[0]
     return len(self.data[k])
 
@@ -40,14 +41,14 @@ class Inventory:
     for k, v in asdict(state).items():
       self.data[k].remove(v)
 
-  def save(self, path: str, format: str = 'csv') -> None:
+  def save(self, path: str, format: str = 'json') -> None:
     assert format in ['csv', 'json'], 'Incorrect saving format provided'
     if format == 'json':
       with open(path, 'w') as f:
-        json.dump(self.data, f)
+        json.dump(self.data, f, indent=2)
     else:
       df = pd.DataFrame(self.data)
-      df.to_csv(path)
+      df.to_csv(path, index=False)
 
   def load(self, path: str) -> None:
     if path.endswith('.json'):
@@ -56,8 +57,8 @@ class Inventory:
     elif path.endswith('.csv'):
       self.data = defaultdict(list)
       df = pd.read_csv(path)
-      for _, row in df.iterrows():
-        self.data[row['key']].append(row['value'])
+      for col in df.columns:
+        self.data[col] = df[col].tolist()
     else:
       raise ValueError('Unsupported file path provided. Path must either be of a `json` or `csv` file.')
 
@@ -87,7 +88,11 @@ def difference(i1: Inventory, i2: Inventory) -> pd.DataFrame | None:
   return None if result.empty else result
 
 
-def take_inventory(cluster_id):
+def get_mtime_str(path: str) -> str:
+  return time.strftime('%Y-%m-%d_%H:%M:%S', time.localtime(os.stat(path).st_mtime))
+
+
+def take_inventory(cluster_id: str) -> Inventory:
   base_root = SCALING_RESULTS_FOLDER[cluster_id]
   root = Path(base_root)
 
@@ -95,34 +100,45 @@ def take_inventory(cluster_id):
 
   # if metrics_xyz.json exists then ckpt_xyz.pt exists too
   for path in root.rglob('*.json'):
-    if path.is_file():
-      path_str = str(path)
-      root_removed_path = path_str.split(base_root)[-1]
-      # `root_removed_path` looks like:
-      # attn/20M/gbs_wise_results/gbs_16/checkpoints/lr_0p008/metrics_decayed_to_0p5B.json
+    if not path.is_file():
+      continue
 
-      entries = root_removed_path.split('/')
-      entries.remove('gbs_wise_results')
-      entries.remove('checkpoints')
+    path_str = str(path)
 
-      [arch_id, n, gbs_ext, lr_ext, metrics_fname] = entries
-      gbs = int(gbs_ext.split('_')[-1])
-      lr = float(lr_ext.split('_')[-1].replace('p', '.'))
-      d = metrics_fname.split('_')[-1].replace('p', '.')
-      ckpt_fname = metrics_fname.replace('metrics_', 'ckpt_').replace('.json', '.pt')
+    # Only process metrics files; info.txt and other JSON are ignored
+    if 'metrics_' not in path_str:
+      continue
 
-      cluster_location = 'tud' if cluster_id in ['capella', 'alpha'] else 'mpi'
-      artifact_state = ArtifactState(
-        arch_id=arch_id,
-        n=n,
-        d=d,
-        gbs=gbs,
-        lr=lr,
-        checkpoint_filename=ckpt_fname,
-        metrics_filename=metrics_fname,
-        cluster_location=cluster_location,
-      )
-      inventory.push(artifact_state)
+    metrics_mtime = get_mtime_str(path_str)
+    ckpt_mtime = get_mtime_str(path_str.replace('.json', '.pt').replace('metrics_', 'ckpt_'))
+
+    root_removed_path = path_str.split(base_root)[-1].lstrip('/')
+    # `root_removed_path` looks like:
+    # attn/20M/gbs_wise_results/gbs_16/checkpoints/lr_0p008/metrics_decayed_to_0p5B.json
+
+    entries = root_removed_path.split('/')
+    entries.remove('gbs_wise_results')
+    entries.remove('checkpoints')
+
+    [arch_id, n, gbs_ext, lr_ext, metrics_fname] = entries
+    gbs = int(gbs_ext.split('_')[-1])
+    lr = float(lr_ext.split('_')[-1].replace('p', '.'))
+    d = metrics_fname.split('_')[-1].replace('p', '.')
+    ckpt_fname = metrics_fname.replace('metrics_', 'ckpt_').replace('.json', '.pt')
+
+    cluster_location = 'tud' if cluster_id in ['capella', 'alpha'] else 'mpi'
+    artifact_state = ArtifactState(
+      arch_id=arch_id,
+      n=n,
+      d=d,
+      gbs=gbs,
+      lr=lr,
+      checkpoint_filename=ckpt_fname,
+      metrics_filename=metrics_fname,
+      cluster_location=cluster_location,
+      mtime_spec=f'checkpoint_{ckpt_mtime}__metrics_{metrics_mtime}',
+    )
+    inventory.push(artifact_state)
 
   return inventory
 
@@ -134,31 +150,31 @@ def get_checkpoints_from_changes(changes: pd.DataFrame, cluster_id: str) -> defa
   for i in range(len(changes)):
     src_folder = os.path.join(
       base_folder,
-      str(changes[i]['arch_id']),
-      str(changes[i]['n']),
+      str(changes.iloc[i]['arch_id']),
+      str(changes.iloc[i]['n']),
       'gbs_wise_results',
-      f'gbs_{changes[i]["gbs"]}',
+      f'gbs_{changes.iloc[i]["gbs"]}',
       'checkpoints',
-      f'lr_{str(changes[i]["lr"]).replace(".", "p")}',
+      f'lr_{str(changes.iloc[i]["lr"]).replace(".", "p")}',
     )
-    src_ckpt_path = os.path.join(src_folder, f'ckpt_decayed_to_{changes[i]["d"].replace(".", "p")}.pt')
+    src_ckpt_path = os.path.join(src_folder, f'ckpt_decayed_to_{changes.iloc[i]["d"].replace(".", "p")}.pt')
     paths['checkpoints_src'].append(src_ckpt_path)
 
-    src_metrics_path = os.path.join(src_folder, f'metrics_decayed_to_{changes[i]["d"].replace(".", "p")}.json')
+    src_metrics_path = os.path.join(src_folder, f'metrics_decayed_to_{changes.iloc[i]["d"].replace(".", "p")}.json')
     paths['metrics_src'].append(src_metrics_path)
 
     dest_folder = os.path.join(
-      str(changes[i]['n']),
-      f'gbs_{changes[i]["gbs"]}',
-      f'lr_{str(changes[i]["lr"]).replace(".", "p")}',
+      str(changes.iloc[i]['n']),
+      f'gbs_{changes.iloc[i]["gbs"]}',
+      f'lr_{str(changes.iloc[i]["lr"]).replace(".", "p")}',
     )
 
-    dest_ckpt_path = os.path.join(dest_folder, f'ckpt_decayed_to_{changes[i]["d"].replace(".", "p")}.pt')
+    dest_ckpt_path = os.path.join(dest_folder, f'ckpt_decayed_to_{changes.iloc[i]["d"].replace(".", "p")}.pt')
     paths['checkpoints_dest'].append(dest_ckpt_path)
 
-    dest_metrics_path = os.path.join(dest_folder, f'metrics_decayed_to_{changes[i]["d"].replace(".", "p")}.json')
+    dest_metrics_path = os.path.join(dest_folder, f'metrics_decayed_to_{changes.iloc[i]["d"].replace(".", "p")}.json')
     paths['metrics_dest'].append(dest_metrics_path)
 
-    paths['dest_repo'].append(f'OpenThesis_{changes[i]["arch_id"]}')
+    paths['dest_repo'].append(f'OpenThesis_{changes.iloc[i]["arch_id"]}')
 
   return paths
