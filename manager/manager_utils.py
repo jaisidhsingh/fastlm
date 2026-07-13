@@ -281,7 +281,6 @@ queue $(n_jobs)
 
   elif cfg.cluster_id == 'alpha':
     return f"""#!/bin/bash
-#SBATCH --job-name=somejobname
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task={cpus}
@@ -389,6 +388,7 @@ queue $(n_jobs)
 #SBATCH --error=/data/horse/ws/jasi149i-fastlm/logs/june/err/job-%A_%a.err
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
+#SBATCH --exclude=i8009
 #SBATCH --cpus-per-task={cpus}
 #SBATCH --mem={mem}G
 #SBATCH --gres=gpu:1
