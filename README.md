@@ -70,12 +70,16 @@ plainLM/
 └── utils.py             # Miscellaneous helper functions
 ```
 
-## ☑️ TODO
+## Sync Service
 
-- [FSDP2](https://docs.pytorch.org/tutorials/intermediate/FSDP_tutorial.html) support, ZeRO-2 and tensor parallel compatibility
-- dummy data
-- unit tests
-- add seed to `DistributedSampler`
+```bash
+# On the cluster, after training artifacts are produced:
+git pull                              # get latest inventory
+python -m services.sync --cluster-id mpi
+git add services/inventories/
+git commit -m "sync: mpi artifacts"
+git push
+```
 
 ## Citation
 
