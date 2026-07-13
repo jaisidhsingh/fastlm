@@ -54,9 +54,7 @@ seed: 123
 seq_len: 2048
 steps_budget: -1
 tie_embeddings: true
-token_budget_id:
-- 0.5B
-- 1.0B
+token_budget_id: 3.0B
 token_mixer: gdn+attn
 torch_compile: true
 trainset_path: /data/horse/ws/jasi149i-fastlm/data/nemotron-cc-sample-mtsynth/tokenized_gpt2/ctx_2048/train
