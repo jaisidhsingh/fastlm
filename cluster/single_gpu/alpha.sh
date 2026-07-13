@@ -2,8 +2,9 @@
 
 source /home/jasi149i/.bashrc
 # source /data/horse/ws/jasi149i-fastlm/envs/pt/bin/activate
-module load Miniconda3/25.5.1-1
-conda activate /home/jasi149i/.conda/envs/pt
+#module load Miniconda3/25.5.1-1
+#source /software/genoa/r25.06/Miniconda3/25.5.1-1/etc/profile.d/conda.sh
+conda activate ~/.conda/envs/pt
 echo "Check if environment is indeed on"
 pip show torch
 
