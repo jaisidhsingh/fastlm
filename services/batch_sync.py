@@ -53,13 +53,17 @@ def ensure_hf_repo_exists(api: HfApi, arch_id: str) -> str:
   return repo_id
 
 
-def extract_model_state_dict_to_tmpfile(checkpoint_path: str, cluster_id: str) -> str:
+def extract_model_state_dict_to_tmpfile(
+  checkpoint_path: str, cluster_id: str, arch_id: str, n: str, gbs: int, lr: float
+) -> str:
   """Load a full training checkpoint, extract only `state_dict`, save to tmp.
 
   Returns the path to the temporary file.
   """
   _cluster_key = 'capella' if cluster_id == 'tud' else 'mpi'
-  tmp_dir = TMP_FOLDER_FOR_UPLOAD[_cluster_key]
+  tmp_dir = os.path.join(
+    TMP_FOLDER_FOR_UPLOAD[_cluster_key], f'{arch_id}_n-{n}_gbs-{gbs}_lr-{str(lr).replace(".", "p")}'
+  )
   os.makedirs(tmp_dir, exist_ok=True)
 
   print(f'  Extracting state_dict from {checkpoint_path} ...')
@@ -136,6 +140,7 @@ def main(cfg: SyncServiceConfig) -> None:
 
   num_changes = len(changes)
   print(f'Found {num_changes} artifact(s) to upload.')
+  return
 
   # Step 4: get source/destination paths for every changed artifact
   upload_paths = get_checkpoints_from_changes(changes, cluster_id)
@@ -158,6 +163,9 @@ def main(cfg: SyncServiceConfig) -> None:
 
       for i in range(start, end):
         arch_id = str(changes.iloc[i]['arch_id'])
+        n = str(changes.iloc[i]['n'])
+        gbs = int(changes.iloc[i]['gbs'])
+        lr = float(changes.iloc[i]['lr'])
         ckpt_src = upload_paths['checkpoints_src'][i]
         metrics_src = upload_paths['metrics_src'][i]
         ckpt_dest = upload_paths['checkpoints_dest'][i]
@@ -175,7 +183,7 @@ def main(cfg: SyncServiceConfig) -> None:
         # Extract state_dict to temp file
         if not os.path.exists(ckpt_src):
           raise FileNotFoundError(f'Checkpoint not found: {ckpt_src}')
-        tmp_ckpt = extract_model_state_dict_to_tmpfile(ckpt_src, cluster_id)
+        tmp_ckpt = extract_model_state_dict_to_tmpfile(ckpt_src, cluster_id, arch_id, n, gbs, lr)
         tmp_files_to_clean.append(tmp_ckpt)
 
         # Add checkpoint to batch
