@@ -1,7 +1,6 @@
 import os
 from dataclasses import dataclass
 
-import pandas as pd
 import torch
 import tyro
 from huggingface_hub import HfApi
@@ -18,12 +17,12 @@ from src.constants import TMP_FOLDER_FOR_UPLOAD
 _SERVICES_DIR = os.path.dirname(os.path.abspath(__file__))
 _INVENTORIES_DIR = os.path.join(_SERVICES_DIR, 'inventories')
 _HF_INVENTORY_PATH = os.path.join(_INVENTORIES_DIR, 'hf_inventory.json')
-_HF_USERNAME = 'jaisidh'
+_HF_USERNAME = 'jaisidhsingh'
 
 
 @dataclass
 class SyncServiceConfig:
-  cluster_id: str  # one of: mpi, capella, alpha
+  cluster_id: str  # one of: mpi, tud
 
 
 def load_hf_state() -> Inventory:
@@ -46,6 +45,7 @@ def ensure_hf_repo_exists(api: HfApi, arch_id: str) -> str:
   Returns the repo_id.
   """
   repo_id = f'{_HF_USERNAME}/OpenThesis_{arch_id}'
+  repo_id = repo_id.replace('+', '-')
   print(f'Ensuring HF repo exists: {repo_id} ...')
   api.create_repo(repo_id=repo_id, repo_type='dataset', exist_ok=True)
   return repo_id
@@ -56,7 +56,8 @@ def extract_model_state_dict_to_tmpfile(checkpoint_path: str, cluster_id: str) -
 
   Returns the path to the temporary file.
   """
-  tmp_dir = TMP_FOLDER_FOR_UPLOAD[cluster_id]
+  _cluster_key = 'capella' if cluster_id == 'tud' else 'mpi'
+  tmp_dir = TMP_FOLDER_FOR_UPLOAD[_cluster_key]
   os.makedirs(tmp_dir, exist_ok=True)
 
   print(f'  Extracting state_dict from {checkpoint_path} ...')
@@ -81,29 +82,14 @@ def upload_file_to_hf(api: HfApi, repo_id: str, src_path: str, dest_path: str) -
   )
 
 
-def update_hf_inventory(uploaded_entries: pd.DataFrame) -> None:
-  """Append successfully-uploaded artifact entries to hf_inventory.json."""
+def append_to_hf_inventory(state: ArtifactState) -> None:
+  """Append a single successfully-uploaded artifact to hf_inventory.json."""
   hf_inventory = Inventory()
   if os.path.exists(_HF_INVENTORY_PATH):
     hf_inventory.load(_HF_INVENTORY_PATH)
-
-  for _, row in uploaded_entries.iterrows():
-    state = ArtifactState(
-      arch_id=str(row['arch_id']),
-      n=str(row['n']),
-      d=str(row['d']),
-      gbs=int(str(row['gbs'])),
-      lr=float(str(row['lr'])),
-      checkpoint_filename=str(row['checkpoint_filename']),
-      metrics_filename=str(row['metrics_filename']),
-      cluster_location=str(row['cluster_location']),
-      mtime_spec=str(row['mtime_spec']),
-    )
-    hf_inventory.push(state)
-
+  hf_inventory.push(state)
   os.makedirs(_INVENTORIES_DIR, exist_ok=True)
   hf_inventory.save(_HF_INVENTORY_PATH, format='json')
-  print(f'Updated HF inventory: {len(hf_inventory)} total entries at {_HF_INVENTORY_PATH}')
 
 
 def save_local_snapshot(local_inventory: Inventory, cluster_id: str) -> None:
@@ -115,6 +101,7 @@ def save_local_snapshot(local_inventory: Inventory, cluster_id: str) -> None:
 
 
 def main(cfg: SyncServiceConfig) -> None:
+  assert cfg.cluster_id in ['mpi', 'tud'], 'Unsupported value of `--cluster_id` provided.'
   cluster_id = cfg.cluster_id
 
   # Step 1: take inventory of the cluster
@@ -127,11 +114,13 @@ def main(cfg: SyncServiceConfig) -> None:
   changes = difference(local_inventory, hf_inventory)
   if changes is None:
     print('No new or modified artifacts found — nothing to upload.')
-    save_local_snapshot(local_inventory, cluster_id)
     return
+
+  save_local_snapshot(local_inventory, cluster_id)
 
   num_changes = len(changes)
   print(f'Found {num_changes} artifact(s) to upload.')
+  return
 
   # Step 4: get source/destination paths for every changed artifact
   upload_paths = get_checkpoints_from_changes(changes, cluster_id)
@@ -144,6 +133,7 @@ def main(cfg: SyncServiceConfig) -> None:
     for i in range(num_changes):
       arch_id = str(changes.iloc[i]['arch_id'])
       ckpt_src = upload_paths['checkpoints_src'][i]
+
       metrics_src = upload_paths['metrics_src'][i]
       ckpt_dest = upload_paths['checkpoints_dest'][i]
       metrics_dest = upload_paths['metrics_dest'][i]
@@ -152,8 +142,10 @@ def main(cfg: SyncServiceConfig) -> None:
         f'\n--- Artifact {i + 1}/{num_changes}: {arch_id} / {changes.iloc[i]["n"]} / gbs_{changes.iloc[i]["gbs"]} / lr_{changes.iloc[i]["lr"]} / {changes.iloc[i]["d"]} ---'
       )
 
-      # 4a: ensure HF repo exists
-      repo_id = ensure_hf_repo_exists(api, arch_id)
+      # # 4a: ensure HF repo exists
+      # repo_id = ensure_hf_repo_exists(api, arch_id)
+      repo_id = f'{_HF_USERNAME}/OpenThesis_{arch_id}'
+      repo_id = repo_id.replace('+', '-')
 
       # 4b: extract state_dict to temp file
       if not os.path.exists(ckpt_src):
@@ -171,13 +163,23 @@ def main(cfg: SyncServiceConfig) -> None:
 
       print(f'Uploaded artifact successfully.')
 
-    # Step 5: update HF inventory (only after all uploads succeed)
-    print('Updating HF inventory')
-    update_hf_inventory(changes)
+      # Step 5: persist this artifact to hf_inventory immediately
+      state = ArtifactState(
+        arch_id=str(changes.iloc[i]['arch_id']),
+        n=str(changes.iloc[i]['n']),
+        d=str(changes.iloc[i]['d']),
+        gbs=int(str(changes.iloc[i]['gbs'])),
+        lr=float(str(changes.iloc[i]['lr'])),
+        checkpoint_filename=str(changes.iloc[i]['checkpoint_filename']),
+        metrics_filename=str(changes.iloc[i]['metrics_filename']),
+        cluster_location=str(changes.iloc[i]['cluster_location']),
+        mtime_spec=str(changes.iloc[i]['mtime_spec']),
+      )
+      append_to_hf_inventory(state)
 
   except Exception as e:
     print(f'\n!!! Upload failed: {e}')
-    print('HF inventory was NOT updated — artifacts will be retried on next sync.')
+    print('Uploaded artifacts were saved to HF inventory — remaining will be retried on next sync.')
     raise
 
   finally:

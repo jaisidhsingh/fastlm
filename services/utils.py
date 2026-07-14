@@ -74,6 +74,8 @@ def union(i1: Inventory, i2: Inventory) -> pd.DataFrame:
 def intersection(i1: Inventory, i2: Inventory) -> pd.DataFrame:
   df1 = pd.DataFrame(i1.data)
   df2 = pd.DataFrame(i2.data)
+  if df1.empty or df2.empty:
+    return pd.DataFrame()
   return df1.merge(df2).drop_duplicates(ignore_index=True)
 
 
@@ -81,6 +83,10 @@ def difference(i1: Inventory, i2: Inventory) -> pd.DataFrame | None:
   # Returns rows in df1 that are not in df2. Equivalent to df1 - intersection(df1, df2)
   df1 = pd.DataFrame(i1.data)
   df2 = pd.DataFrame(i2.data)
+  if df1.empty:
+    return None
+  if df2.empty:
+    return df1.reset_index(drop=True)
   result = (
     df1.merge(df2, how='left', indicator=True)
     .query('_merge == "left_only"')
@@ -95,7 +101,8 @@ def get_mtime_str(path: str) -> str:
 
 
 def take_inventory(cluster_id: str) -> Inventory:
-  base_root = SCALING_RESULTS_FOLDER[cluster_id]
+  _cluster_key = 'capella' if cluster_id == 'tud' else 'mpi'
+  base_root = SCALING_RESULTS_FOLDER[_cluster_key]
   root = Path(base_root)
 
   inventory = Inventory()
@@ -108,7 +115,7 @@ def take_inventory(cluster_id: str) -> Inventory:
     path_str = str(path)
 
     # Only process metrics files; info.txt and other JSON are ignored
-    if 'metrics_' not in path_str:
+    if 'metrics_decayed_to_' not in path_str:
       continue
 
     metrics_mtime = get_mtime_str(path_str)
@@ -125,10 +132,11 @@ def take_inventory(cluster_id: str) -> Inventory:
     [arch_id, n, gbs_ext, lr_ext, metrics_fname] = entries
     gbs = int(gbs_ext.split('_')[-1])
     lr = float(lr_ext.split('_')[-1].replace('p', '.'))
-    d = metrics_fname.split('_')[-1].replace('p', '.')
+    d_prec = metrics_fname.split('_')[-1].replace('p', '.').split('B')[0]
+    d = d_prec + 'B'
     ckpt_fname = metrics_fname.replace('metrics_', 'ckpt_').replace('.json', '.pt')
 
-    cluster_location = 'tud' if cluster_id in ['capella', 'alpha'] else 'mpi'
+    cluster_location = cluster_id
     artifact_state = ArtifactState(
       arch_id=arch_id,
       n=n,
@@ -146,7 +154,8 @@ def take_inventory(cluster_id: str) -> Inventory:
 
 
 def get_checkpoints_from_changes(changes: pd.DataFrame, cluster_id: str) -> defaultdict:
-  base_folder = SCALING_RESULTS_FOLDER[cluster_id]
+  _cluster_key = 'capella' if cluster_id == 'tud' else 'mpi'
+  base_folder = SCALING_RESULTS_FOLDER[_cluster_key]
   paths = defaultdict(list)
 
   for i in range(len(changes)):
