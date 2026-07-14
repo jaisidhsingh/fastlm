@@ -140,7 +140,6 @@ def main(cfg: SyncServiceConfig) -> None:
 
   num_changes = len(changes)
   print(f'Found {num_changes} artifact(s) to upload.')
-  return
 
   # Step 4: get source/destination paths for every changed artifact
   upload_paths = get_checkpoints_from_changes(changes, cluster_id)
