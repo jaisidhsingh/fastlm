@@ -29,9 +29,9 @@ cd $PROJECT
 
 arch_id=("gdn+attn_1-1")
 n=("20M" "50M")
-gbs=(32)
+gbs=(16 32)
 lr="all_parallel"
-mode="main"
+mode="decay"
 bid=100
 submit="yes"
 routine="train"
