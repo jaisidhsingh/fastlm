@@ -139,6 +139,11 @@ TMP_FOLDER_FOR_UPLOAD = {
   'capella': '/data/horse/ws/jasi149i-fastlm/hf_sync_results/tmp_storage',
   'alpha': '/data/horse/ws/jasi149i-fastlm/hf_sync_results/tmp_storage',
 }
+HF_METRIC_FOLDER = {
+  'mpi': '/fast/jsingh/projects/fastlm/hf_sync_results/metrics_download',
+  'capella': '/data/horse/ws/jasi149i-fastlm/hf_sync_results/metrics_download',
+  'alpha': '/data/horse/ws/jasi149i-fastlm/hf_sync_results/metrics_donwload',
+}
 DEFAULT_CONFIG = {
   'deterministic': False,
   'seed': 123,

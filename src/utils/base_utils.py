@@ -249,7 +249,7 @@ def download_hf_file(ckpt_params: tuple, dest_folder: str) -> None:
   os.makedirs(dest_folder, exist_ok=True)
 
   api = HfApi()
-  repo_id = 'jaisidhsingh/' + str(arch_id).replace('+', '-')
+  repo_id = 'jaisidhsingh/OpenThesis_' + str(arch_id).replace('+', '-')
   save_path = api.hf_hub_download(repo_id=repo_id, filename=repo_in_path, local_dir=dest_folder)
   return save_path
 
