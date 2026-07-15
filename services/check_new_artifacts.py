@@ -53,6 +53,6 @@ def main(cfg: SyncServiceConfig) -> None:
   print(f'Found {num_changes} artifact(s) to upload.')
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
   cfg = tyro.cli(SyncServiceConfig)
   main(cfg)

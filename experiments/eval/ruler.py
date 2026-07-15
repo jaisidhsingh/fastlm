@@ -1,48 +1,96 @@
 import json
 import os
+import sys
+from dataclasses import dataclass
+from types import SimpleNamespace
 
 import torch
+import tyro
 from absl import app, flags
 
-from src.constants import SCALING_RESULTS_FOLDER
-from src.models.construct import construct_hf_config
+from src.constants import *
+from src.models.construct import *
 from src.models.to_hf import HFModelForCausalLM, load_checkpoint_into_hf, register
-from src.utils.base_utils import load_config, print_master
+from src.utils.base_utils import load_config, parse_arch_id
 
 register()
 
-flags.DEFINE_string('config', 'src/config/cfg_eval.yaml', 'Path to config.yaml file.')
-flags.DEFINE_integer('job_idx', None, 'Job idx for job-array sweeps. From 0 to n-1.')
-flags.DEFINE_integer('job_cluster', None, 'Job cluster ID.')
-FLAGS = flags.FLAGS
+DEFAULT_MODEL_CONFIG = {
+  'arch_id': 'attn',
+  'param_scale_id': '20M',
+  'model': 'transformer',
+  'd_model': 256,
+  'mlp_class': 'glu',
+  'dtype': 'bfloat16',
+  'expand': 3.0,
+  'n_layers': 8,
+  'n_heads': 4,
+  'rms_norm': True,
+  'tie_embeddings': True,
+  'torch_compile': True,
+  'token_mixer': 'attn',
+  'hybrid_mixer_ratio': 1,
+  'layer_norm_scaling': False,
+  'residual_connection': 'add',
+  'attn_gate': True,
+  'attn_qk_norm': True,
+  'gdn_conv_size': 4,
+  'gdn_gate': True,
+  'gdn_neg_eigval': True,
+  'use_flex_attention': True,
+  'vocab_size': 50304,
+  'intra_doc_masking': False,
+}
 
 
-def setup_model_and_save(cfg):
-  hf_cfg = construct_hf_config(cfg)
+@dataclass
+class EvalConfig:
+  arch_id: str
+  ckpt_path: str
+  n: str = '150M'
+  cluster_id: str = 'mpi'
+  tokenizer_path: str = '/fast/jsingh/saved_tokenizers/better-gpt2/'
+
+
+def setup_model_config(cfg):
+  mcfg_from_ladder = SCALING_LADDER['models'][cfg.n]
+  arch, ratio = parse_arch_id(cfg.arch_id)
+  model_cfg = SimpleNamespace(**DEFAULT_MODEL_CONFIG)
+  model_cfg.token_mixer = arch
+  model_cfg.hybrid_mixer_ratio = ratio
+  model_cfg.param_scale_id = cfg.n
+  model_cfg.arch_id = cfg.arch_id
+  model_cfg.d_model = mcfg_from_ladder['d_model']
+  model_cfg.n_layers = mcfg_from_ladder['n_layers']
+  model_cfg.n_heads = mcfg_from_ladder['n_heads']
+  model_cfg.seq_len = 2048
+  return model_cfg
+
+
+def setup_model_and_save(cfg, hf_model_save_folder):
+  mcfg = setup_model_config(cfg)
+  hf_cfg = construct_hf_config_from_mcfg(mcfg)
   model = HFModelForCausalLM._from_config(hf_cfg)
-  model = load_checkpoint_into_hf(model, cfg.checkpoint_path)
-  model.save_pretrained(cfg.hf_model_save_folder)
+  load_checkpoint_into_hf(model, cfg.ckpt_path)
+  print(model._tied_weights_keys)
+  print(getattr(model, '_dynamic_tied_weights_keys', None))
+  print(model.config.tie_word_embeddings)
+  model.save_pretrained(hf_model_save_folder)
   del model
 
 
 def _get_results_base(cfg):
-  arch_id = cfg.arch_id
-  gbs = cfg.global_batch_size
-  return os.path.join(SCALING_RESULTS_FOLDER, arch_id, 'gbs_wise_results', f'gbs_{gbs}')
+  return os.path.join('./results', cfg.arch_id)
 
 
 def _get_save_prefix(cfg):
-  lr = cfg.lr
-  return f'eval_lr-{str(lr).replace(".", "p")}'
+  return 'ruler'
 
 
-def main(argv):
+def main(cfg):
   # lazy import lm_eval because of `register()`
   from lm_eval import evaluator
   from transformers import AutoTokenizer
-
-  cfg_path = FLAGS.config
-  cfg, sweep_size = load_config(cfg_path)
 
   device = 'cpu'
   if torch.cuda.is_available():
@@ -54,26 +102,29 @@ def main(argv):
   save_prefix = _get_save_prefix(cfg)
 
   # Save model and tokenizer to a temp folder
-  setup_model_and_save(cfg)
-  tokenizer = AutoTokenizer.from_pretrained(cfg.tokenizer_path)
-  tokenizer.save_pretrained(cfg.hf_model_save_folder)
+  hf_model_save_folder = os.path.dirname(cfg.ckpt_path)
+  setup_model_and_save(cfg, hf_model_save_folder)
+
+  tokenizer = AutoTokenizer.from_pretrained(cfg.tokenizer_path, model_max_length=2048)
+  tokenizer.save_pretrained(hf_model_save_folder)
   del model, tokenizer
 
   results = evaluator.simple_evaluate(
     model='hf',
-    model_args=f'pretrained={eval_ckpt_folder}',
+    model_args=f'pretrained={hf_save_folder}',
     tasks=['ruler'],
     batch_size='auto',
     device=device,
   )
 
-  output_path = os.path.join(base_folder, f'{save_prefix}_{"__".join(tasks)}.json')
+  output_path = os.path.join(base_folder, 'results_ruler.json')
   with open(output_path, 'w') as f:
     json.dump(results, f)
 
-  print_master(f'RULER results saved to {output_path}')
-  print_master('Evaluation complete.')
+  print(f'RULER results saved to {output_path}')
+  print('Evaluation complete.')
 
 
 if __name__ == '__main__':
-  app.run(main)
+  cfg = tyro.cli(EvalConfig)
+  main(cfg)

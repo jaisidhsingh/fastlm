@@ -50,6 +50,11 @@ def construct_hf_config(cfg):
   return HFModelConfig(**vars(model_cfg))
 
 
+def construct_hf_config_from_mcfg(cfg):
+  cfg.expand = float(Fraction(cfg.expand))
+  return HFModelConfig(**vars(cfg))
+
+
 def construct_model(cfg):
   """Initalize a model from config. Counts parameters."""
   if cfg.model == 'transformer':

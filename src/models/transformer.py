@@ -171,11 +171,12 @@ class Transformer(nn.Module):
 
   def forward(self, x, attention_mask=None, linear_mask=None, cu_seqlens=None):
     # x: (bsz, seqlen)
+    seqlen = x.shape[1]
     x = self.embed_tokens(x)  # (bsz, seqlen, dim)
-    self.freqs_cis = self.freqs_cis.to(x.device)
+    freqs_cis = self.freqs_cis.to(x.device)[:, :seqlen]
 
     for layer in self.layers:
-      x = layer(x, self.freqs_cis, attention_mask, linear_mask, cu_seqlens)  # (bsz, seqlen, dim)
+      x = layer(x, freqs_cis, attention_mask, linear_mask, cu_seqlens)  # (bsz, seqlen, dim)
 
     return self.lm_head(self.out_norm(x))  # (bsz, seqlen, vocab_size)
 

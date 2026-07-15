@@ -37,7 +37,7 @@ class HFModelConfig(PretrainedConfig):
     **kwargs,
   ):
     super().__init__(**kwargs)
-
+    self.tie_word_embeddings = tie_embeddings
     self.vocab_size = vocab_size
     self.seq_len = seq_len
     self.dim = dim
@@ -62,6 +62,7 @@ class HFModelConfig(PretrainedConfig):
     self.gdn_neg_eigval = gdn_neg_eigval
 
     self.intra_doc = intra_doc
+    self.d_model = d_model
 
 
 def hf_to_internal_config(cfg: HFModelConfig):
@@ -91,15 +92,17 @@ def hf_to_internal_config(cfg: HFModelConfig):
 class HFModelForCausalLM(PreTrainedModel, GenerationMixin):
   config_class = HFModelConfig
   base_model_prefix = 'model'
-
   supports_gradient_checkpointing = False
+  # _tied_weights_keys = ['model.lm_head.weight']
 
   def __init__(self, config):
     super().__init__(config)
-
     self.model = Transformer(hf_to_internal_config(config))
-
     self.post_init()
+
+  def tie_weights(self, *args, **kwargs):
+    self.model.lm_head.weight = self.model.embed_tokens.weight
+    return super().tie_weights(*args, **kwargs)
 
   def get_input_embeddings(self):
     return self.model.embed_tokens
@@ -175,15 +178,19 @@ def load_checkpoint_into_hf(hf_model, ckpt_path):
   if 'state_dict' in state:
     state = state['state_dict']
 
+  for k in state.keys():
+    if 'weight' in k:
+      print(k)
+
   missing, unexpected = hf_model.model.load_state_dict(
     state,
     strict=True,
   )
 
-  print('missing:', missing)
-  print('unexpected:', unexpected)
-
-  return hf_model
+  if len(missing) > 0:
+    raise Exception('Missing some keys in the checkpoint:', missing)
+  if len(unexpected) > 0:
+    raise Exception('Got some unexpected keys in the checkpoint:', unexpected)
 
 
 def register():

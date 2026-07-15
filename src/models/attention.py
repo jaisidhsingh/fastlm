@@ -32,6 +32,7 @@ class GatedAttention(nn.Module):
     self.use_gate = cfg.attn_gate
     self.qk_norm = cfg.attn_qk_norm
     self.use_flex_attention = getattr(cfg, 'use_flex_attention', False)
+    self.dtype = torch.bfloat16
 
     if self.use_flex_attention:
       if not _FLEX_ATTENTION_AVAILABLE:
@@ -52,7 +53,7 @@ class GatedAttention(nn.Module):
     q, k, v = self.w_qkv(x).split(d, dim=2)  # (bsz, seqlen, d)
     q = q.view(bsz, seqlen, self.n_heads, self.head_dim)  # (bsz, seqlen, nh, h_dim)
     k = k.view(bsz, seqlen, self.n_heads, self.head_dim)  # (bsz, seqlen, nh, h_dim)
-    v = v.view(bsz, seqlen, self.n_heads, self.head_dim)  # (bsz, seqlen, nh, h_dim)
+    v = v.view(bsz, seqlen, self.n_heads, self.head_dim).to(dtype=self.dtype)  # (bsz, seqlen, nh, h_dim)
 
     if self.qk_norm:
       q = self.q_norm(q)

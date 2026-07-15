@@ -144,6 +144,12 @@ HF_METRIC_FOLDER = {
   'capella': '/data/horse/ws/jasi149i-fastlm/hf_sync_results/metrics_download',
   'alpha': '/data/horse/ws/jasi149i-fastlm/hf_sync_results/metrics_donwload',
 }
+HF_CKPT_DOWN_FOLDER = {
+  'mpi': '/fast/jsingh/projects/fastlm/hf_sync_results/ckpt_download',
+  'capella': '/data/horse/ws/jasi149i-fastlm/hf_sync_results/ckpt_download',
+  'alpha': '/data/horse/ws/jasi149i-fastlm/hf_sync_results/ckpt_donwload',
+}
+ARCH_IDS = ['attn', 'gdn+attn_1-3', 'gdn+attn_1-1', 'gdn+attn_3-1', 'gdn']
 DEFAULT_CONFIG = {
   'deterministic': False,
   'seed': 123,

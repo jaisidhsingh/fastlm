@@ -17,6 +17,15 @@ from src.utils.throughput_utils import parse_throughput_metrics
 FLAGS = flags.FLAGS
 
 
+def rm_rf_folder(folder):
+  for entry in os.listdir(folder):
+    path = os.path.join(folder, entry)
+    if os.path.isdir(path) and not os.path.islink(path):
+      shutil.rmtree(path)
+    else:
+      os.remove(path)
+
+
 def parse_arch_id(arch_id: str) -> tp.Tuple[str, int]:
   """
   - pure attention corresponds to `arch_id = "attn"`
