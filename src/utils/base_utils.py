@@ -1,8 +1,6 @@
-import math
 import os
 import shutil
 import typing as tp
-from collections import namedtuple
 from itertools import product
 from types import SimpleNamespace
 
@@ -10,9 +8,10 @@ import torch
 import wandb
 import yaml
 from absl import flags
+from huggingface_hub import HfApi
+from pandas._libs.parsers import na_values
 
 from src.constants import DEFAULT_CONFIG, SCALING_LADDER, SCALING_RESULTS_FOLDER
-from src.engine import TorchEngine
 from src.utils.throughput_utils import parse_throughput_metrics
 
 FLAGS = flags.FLAGS
@@ -202,9 +201,11 @@ def log(
   cfg, metrics, micro_step, train_loss, train_loss_array, valid_loss, optimizer, world_size, throughput_metrics=None
 ):
   if isinstance(train_loss_array, list):
-    train_loss_avg = torch.stack(train_loss_array).mean().item()
+    train_loss_avg = torch.stack(train_loss_array).mean().item() if train_loss_array else 0.0
   elif isinstance(train_loss_array, torch.Tensor):
     train_loss_avg = train_loss_array.item()
+  else:
+    train_loss_avg = 0.0
 
   new_metrics = {
     'micro_step': micro_step,
@@ -240,3 +241,49 @@ def print_master(msg):
   master_process = (not ddp) or (int(rank) == 0)
   if master_process:
     print(msg)
+
+
+def download_hf_file(ckpt_params: tuple, dest_folder: str) -> None:
+  (arch_id, n, d, gbs, lr) = ckpt_params
+  path_in_repo = os.path.join(n, f'gbs_{gbs}', str(lr).replace('.', 'p'), f'ckpt_decayed_to_{d.replace(".", "p")}.pt')
+  os.makedirs(dest_folder, exist_ok=True)
+
+  api = HfApi()
+  repo_id = 'jaisidhsingh/' + str(arch_id).replace('+', '-')
+  save_path = api.hf_hub_download(repo_id=repo_id, filename=repo_in_path, local_dir=dest_folder)
+  return save_path
+
+
+def validate_hf_stored_ckpt(arch_id, n, ckpt):
+  err_msg = 'Found incorrect architecture in specified checkpoint!'
+  d_model = ckpt['embed_tokens.weight'].shape[1]
+  assert d_model == SCALING_LADDER[n]['d_model'], err_msg
+
+  arch, ratio = parse_arch_id(arch_id)
+
+  if '+' not in arch:
+    if arch == 'attn':
+      assert 'layers.0.token_mixer.w_qkv.weight' in ckpt, err_msg
+    else:  # gdn
+      assert 'layers.0.token_mixer.A_log' in ckpt, err_msg
+
+  if ratio > 0:
+    token_mixers = arch.split('+')  # [gdn, attn]
+  else:
+    token_mixers = arch.split('+')
+    token_mixers.reverse()  # [attn, gdn]
+
+  for i in range(4):
+    if ratio > 0:
+      if (i + 1) % (ratio + 1) == 0:  # on attn
+        assert f'layers.{i}.token_mixer.w_qkv.weight' in ckpt, err_msg
+      else:  # on gdn
+        assert f'layers.{i}.token_mixer.A_log' in ckpt, err_msg
+
+    else:
+      if i % (abs(ratio) + 1) == 0:  # on gdn
+        assert f'layers.{i}.token_mixer.A_log' in ckpt, err_msg
+      else:  # on attn
+        assert f'layers.{i}.token_mixer.w_qkv.weight' in ckpt, err_msg
+
+  print('Checkpoint architecture is valid!')
