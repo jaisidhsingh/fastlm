@@ -1,9 +1,6 @@
 #!/bin/bash
 
 source /home/jasi149i/.bashrc
-# source /data/horse/ws/jasi149i-hybridlms/envs/pt/bin/activate
-#module load Miniconda3/25.5.1-1
-#source /software/genoa/r25.06/Miniconda3/25.5.1-1/etc/profile.d/conda.sh
 conda activate ~/.conda/envs/pt
 echo "Check if environment is indeed on"
 pip show torch
@@ -17,10 +14,6 @@ CONFIG=$1
 SLURM_ARRAY_TASK_ID=$2
 SLURM_JOB_ID=$3
 DP=$4
-
-MASTER_ADDR=$(scontrol show hostnames $SLURM_JOB_NODELIST | head -n 1)
-MASTER_PORT=29500
-
 cluster_id="alpha"
 
 mp_cache="/data/horse/ws/jasi149i/tmp/mp/${SLURM_JOB_ID}_${SLURM_ARRAY_TASK_ID}"
@@ -38,18 +31,26 @@ export WANDB_CACHE_DIR=$wandb_cache
 export TRITON_CACHE_DIR=$triton_cache
 export TORCHINDUCTOR_CACHE_DIR=$inductor_cache
 
-# Execute python script
+export MASTER_ADDR=$(scontrol show hostnames "$SLURM_JOB_NODELIST" | head -n 1)
+export MASTER_PORT=$((10000 + SLURM_JOB_ID % 1000 + SLURM_ARRAY_TASK_ID))
+
+echo "MASTER_ADDR=${MASTER_ADDR}"
+echo "MASTER_PORT=${MASTER_PORT}"
+echo "SLURM_NODEID=${SLURM_NODEID}"
+echo "SLURM_NNODES=${SLURM_NNODES}"
+
 cd /projects/p_neurasearch/fastlm
+
 srun torchrun \
-    --nnodes=$SLURM_NNODES \
-    --nproc_per_node=8 \
-    --node_rank=$SLURM_NODEID \
-    --master_addr=$MASTER_ADDR \
-    --master_port=$MASTER_PORT \
+    --nnodes="${SLURM_NNODES}" \
+    --nproc-per-node=8 \
+    --node-rank="${SLURM_NODEID}" \
+    --master-addr="${MASTER_ADDR}" \
+    --master-port="${MASTER_PORT}" \
     -m experiments.train \
-    --config=$CONFIG \
-    --job_idx=$SLURM_ARRAY_TASK_ID \
-    --job_cluster=$SLURM_JOB_ID \
-    --cluster_id=$cluster_id;
+    --config="${CONFIG}" \
+    --job_idx="${SLURM_ARRAY_TASK_ID}" \
+    --job_cluster="${SLURM_JOB_ID}" \
+    --cluster_id="${cluster_id}"
 
 rm -rf $mp_cache $wandb_cache $triton_cache $inductor_cache

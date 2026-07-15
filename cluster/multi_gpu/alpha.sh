@@ -1,9 +1,6 @@
 #!/bin/bash
 
 source /home/jasi149i/.bashrc
-# source /data/horse/ws/jasi149i-fastlm/envs/pt/bin/activate
-#module load Miniconda3/25.5.1-1
-#source /software/genoa/r25.06/Miniconda3/25.5.1-1/etc/profile.d/conda.sh
 conda activate ~/.conda/envs/pt
 echo "Check if environment is indeed on"
 pip show torch
@@ -17,7 +14,6 @@ CONFIG=$1
 SLURM_ARRAY_TASK_ID=$2
 SLURM_JOB_ID=$3
 DP=$4
-
 cluster_id="alpha"
 
 mp_cache="/tmp/mp/${SLURM_JOB_ID}_${SLURM_ARRAY_TASK_ID}"
@@ -32,9 +28,12 @@ export WANDB_CACHE_DIR=$wandb_cache
 export TRITON_CACHE_DIR=$triton_cache
 export TORCHINDUCTOR_CACHE_DIR=$inductor_cache
 
+master_port=$((10000 + $SLURM_JOB_ID % 1000 + $SLURM_ARRAY_TASK_ID))
+export MASTER_PORT=$((10000 + $SLURM_JOB_ID % 1000 + $SLURM_ARRAY_TASK_ID))
+
 # Execute python script
 cd /projects/p_neurasearch/fastlm
-torchrun --nproc_per_node=$DP -m experiments.train \
+torchrun --master-port=$master_port --nproc_per_node=$DP -m experiments.train \
   --config=$CONFIG \
   --job_idx=$SLURM_ARRAY_TASK_ID \
   --job_cluster=$SLURM_JOB_ID \
