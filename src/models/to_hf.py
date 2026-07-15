@@ -43,6 +43,7 @@ class HFModelConfig(PretrainedConfig):
     self.dim = dim
     self.expand = expand
     self.n_layers = n_layers
+    self.num_hidden_layers = n_layers
     self.n_heads = n_heads
 
     self.mlp = mlp
@@ -62,7 +63,9 @@ class HFModelConfig(PretrainedConfig):
     self.gdn_neg_eigval = gdn_neg_eigval
 
     self.intra_doc = intra_doc
-    self.d_model = d_model
+    if 'd_model' in kwargs:
+      print('d_model confirmed')
+      self.d_model = kwargs['d_model']
 
 
 def hf_to_internal_config(cfg: HFModelConfig):
@@ -93,15 +96,19 @@ class HFModelForCausalLM(PreTrainedModel, GenerationMixin):
   config_class = HFModelConfig
   base_model_prefix = 'model'
   supports_gradient_checkpointing = False
-  # _tied_weights_keys = ['model.lm_head.weight']
+  _tied_weights_keys = {
+    'model.lm_head.weight': 'model.embed_tokens.weight',
+  }
 
   def __init__(self, config):
     super().__init__(config)
+    self.architectures = ['HFModelForCausalLM']
     self.model = Transformer(hf_to_internal_config(config))
     self.post_init()
 
   def tie_weights(self, *args, **kwargs):
-    self.model.lm_head.weight = self.model.embed_tokens.weight
+    if self.config.tie_word_embeddings:
+      self.model.lm_head.weight = self.model.embed_tokens.weight
     return super().tie_weights(*args, **kwargs)
 
   def get_input_embeddings(self):
@@ -156,13 +163,14 @@ class HFModelForCausalLM(PreTrainedModel, GenerationMixin):
   ):
     linear_mask, cu_seqlens = None, None
     gdn_present = 'gdn' in self.model.cfg.token_mixer
-    intra_doc = self.model.cfg.intra_doc
+    # intra_doc = self.model.cfg.intra_doc
 
-    if attention_mask is not None:
+    if attention_mask is not None and isinstance(attention_mask, torch.Tensor):
       if gdn_present:
-        linear_mask = torch.ones_like(attention_mask.shape[:-1], dtype=torch.bool, device=input_ids.shape)
-      if intra_doc:
-        linear_mask, cu_seqlens = cu_seqlens_from_dense_attention_mask(attention_mask, device=input_ids.device)
+        req_shape = input_ids.shape
+        linear_mask = torch.ones(req_shape, dtype=torch.bool, device=attention_mask.device)
+      # if intra_doc:
+      #   linear_mask, cu_seqlens = cu_seqlens_from_dense_attention_mask(attention_mask, device=input_ids.device)
 
     return {
       'input_ids': input_ids,
@@ -177,10 +185,6 @@ def load_checkpoint_into_hf(hf_model, ckpt_path):
 
   if 'state_dict' in state:
     state = state['state_dict']
-
-  for k in state.keys():
-    if 'weight' in k:
-      print(k)
 
   missing, unexpected = hf_model.model.load_state_dict(
     state,

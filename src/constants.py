@@ -149,6 +149,16 @@ HF_CKPT_DOWN_FOLDER = {
   'capella': '/data/horse/ws/jasi149i-fastlm/hf_sync_results/ckpt_download',
   'alpha': '/data/horse/ws/jasi149i-fastlm/hf_sync_results/ckpt_donwload',
 }
+HF_TMP_SAVE_MODEL_FOLDER = {
+  'mpi': '/fast/jsingh/projects/fastlm/hf_sync_results/tmp4_lm_eval',
+  'capella': '/data/horse/ws/jasi149i-fastlm/hf_sync_results/tmp4_lm_eval',
+  'alpha': '/data/horse/ws/jasi149i-fastlm/hf_sync_results/tmp4_lm_eval',
+}
+LM_EVAL_INCLUDE_PATHS = {
+  'mpi': '/fast/jsingh/projects/fastlm/hf_sync_results/lm_eval_include_paths',
+  'capella': '/data/horse/ws/jasi149i-fastlm/hf_sync_results/lm_eval_include_paths',
+  'alpha': '/data/horse/ws/jasi149i-fastlm/hf_sync_results/lm_eval_include_paths',
+}
 ARCH_IDS = ['attn', 'gdn+attn_1-3', 'gdn+attn_1-1', 'gdn+attn_3-1', 'gdn']
 DEFAULT_CONFIG = {
   'deterministic': False,

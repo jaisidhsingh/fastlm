@@ -11,7 +11,7 @@ from absl import app, flags
 from src.constants import *
 from src.models.construct import *
 from src.models.to_hf import HFModelForCausalLM, load_checkpoint_into_hf, register
-from src.utils.base_utils import load_config, parse_arch_id
+from src.utils.base_utils import load_config, parse_arch_id, rm_rf_folder
 
 register()
 
@@ -48,6 +48,9 @@ class EvalConfig:
   arch_id: str
   ckpt_path: str
   n: str = '150M'
+  d: str = '3.0B'
+  gbs: int = 32
+  lr: float = 0.001
   cluster_id: str = 'mpi'
   tokenizer_path: str = '/fast/jsingh/saved_tokenizers/better-gpt2/'
 
@@ -69,28 +72,40 @@ def setup_model_config(cfg):
 
 def setup_model_and_save(cfg, hf_model_save_folder):
   mcfg = setup_model_config(cfg)
-  hf_cfg = construct_hf_config_from_mcfg(mcfg)
+  hf_cfg = construct_hf_config(mcfg)
   model = HFModelForCausalLM._from_config(hf_cfg)
+  print(model)
   load_checkpoint_into_hf(model, cfg.ckpt_path)
-  print(model._tied_weights_keys)
-  print(getattr(model, '_dynamic_tied_weights_keys', None))
-  print(model.config.tie_word_embeddings)
   model.save_pretrained(hf_model_save_folder)
   del model
 
 
-def _get_results_base(cfg):
-  return os.path.join('./results', cfg.arch_id)
+def get_save_path(cfg):
+  folder = os.path.join(
+    PROJECT_REPO_ROOT[cfg.cluster_id],
+    cfg.arch_id,
+    cfg.n,
+    f'gbs_{cfg.gbs}__lr_{str(cfg.lr).replace(".", "p")}',
+  )
+  os.makedirs(folder, exist_ok=True)
+  return os.path.join(folder, f'ruler__d-{cfg.d.replace(".", "p")}.json')
 
 
 def _get_save_prefix(cfg):
-  return 'ruler'
+  return f'{cfg.arch_id}_n-{cfg.n}_d-{cfg.d.replace(".", "p")}_gbs-{cfg.gbs}'
 
 
+@torch.inference_mode()
 def main(cfg):
   # lazy import lm_eval because of `register()`
   from lm_eval import evaluator
+  from lm_eval.tasks import TaskManager
   from transformers import AutoTokenizer
+
+  # incl_folder = LM_EVAL_INCLUDE_PATHS[cfg.cluster_id]
+  # task_manager = TaskManager(include_path=incl_folder)
+
+  assert os.path.exists(cfg.ckpt_path), 'Provided checkpoint path does not exist!'
 
   device = 'cpu'
   if torch.cuda.is_available():
@@ -98,31 +113,33 @@ def main(cfg):
   elif torch.mps.is_available():
     device = 'mps'
 
-  base_folder = _get_results_base(cfg)
-  save_prefix = _get_save_prefix(cfg)
-
-  # Save model and tokenizer to a temp folder
-  hf_model_save_folder = os.path.dirname(cfg.ckpt_path)
+  hf_model_save_folder = os.path.join(
+    HF_TMP_SAVE_MODEL_FOLDER[cfg.cluster_id], f'{cfg.arch_id}_n-{cfg.n}_d-{cfg.d.replace(".", "p")}_gbs-{cfg.gbs}'
+  )
+  os.makedirs(hf_model_save_folder, exist_ok=True)
   setup_model_and_save(cfg, hf_model_save_folder)
 
   tokenizer = AutoTokenizer.from_pretrained(cfg.tokenizer_path, model_max_length=2048)
   tokenizer.save_pretrained(hf_model_save_folder)
-  del model, tokenizer
+  del tokenizer
 
+  results = {}
   results = evaluator.simple_evaluate(
     model='hf',
-    model_args=f'pretrained={hf_save_folder}',
+    model_args=f'pretrained={hf_model_save_folder}',
     tasks=['ruler'],
     batch_size='auto',
     device=device,
   )
 
-  output_path = os.path.join(base_folder, 'results_ruler.json')
+  output_path = get_save_path(cfg)
   with open(output_path, 'w') as f:
     json.dump(results, f)
 
   print(f'RULER results saved to {output_path}')
   print('Evaluation complete.')
+
+  rm_rf_folder(hf_model_save_folder)
 
 
 if __name__ == '__main__':

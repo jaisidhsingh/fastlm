@@ -34,4 +34,4 @@ cd $PROJECT
 # Default batch_size to 50 if not provided as first argument
 BATCH_SIZE=${1:-50}
 
-python -m services.batch_sync --cluster_id $CLUSTER_ID --batch_size $BATCH_SIZE
+python -m services.sync.batched --cluster_id $CLUSTER_ID --batch_size $BATCH_SIZE

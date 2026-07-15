@@ -13,12 +13,6 @@ from absl import app, flags
 
 from src.constants import *
 from src.models.construct import *
-from src.models.to_hf import register
-
-# from src.utils.base_utils import load_config
-
-register()
-
 
 DEFAULT_MODEL_CONFIG = {
   'arch_id': 'attn',
@@ -53,18 +47,14 @@ class EvalConfig:
   arch_id: str
   ckpt_path: str
   n: str = '150M'
+  d: str = '3.0B'
+  gbs: int = 32
+  lr: float = 0.001
   cluster_id: str = 'mpi'
   tokenizer_path: str = '/fast/jsingh/saved_tokenizers/better-gpt2/'
 
 
 class HFTokenizerAdapter:
-  """
-  Wraps an HF AutoTokenizer so it works with core_eval.py functions.
-  core_eval expects:
-    tokenizer(prompts, prepend=<bos_token_id>) -> list[list[int]]
-    tokenizer.get_bos_token_id() -> int
-  """
-
   def __init__(self, hf_tokenizer):
     self._tok = hf_tokenizer
 
@@ -86,7 +76,11 @@ class HFTokenizerAdapter:
 
 def setup_model_config(cfg):
   mcfg_from_ladder = SCALING_LADDER['models'][cfg.n]
+  arch, ratio = parse_arch_id(cfg.arch_id)
   model_cfg = SimpleNamespace(**DEFAULT_MODEL_CONFIG)
+  model_cfg.token_mixer = arch
+  model_cfg.hybrid_mixer_ratio = ratio
+  model_cfg.param_scale_id = cfg.n
   model_cfg.arch_id = cfg.arch_id
   model_cfg.d_model = mcfg_from_ladder['d_model']
   model_cfg.n_layers = mcfg_from_ladder['n_layers']
@@ -104,15 +98,18 @@ def setup_model(cfg):
   return model
 
 
-def _get_results_base(cfg):
-  return os.path.join('./results', cfg.arch_id)
+def get_save_path(cfg):
+  folder = os.path.join(
+    PROJECT_REPO_ROOT[cfg.cluster_id],
+    cfg.arch_id,
+    cfg.n,
+    f'gbs_{cfg.gbs}__lr_{str(cfg.lr).replace(".", "p")}',
+  )
+  os.makedirs(folder, exist_ok=True)
+  return os.path.join(folder, f'dclm-core__d-{cfg.d.replace(".", "p")}.json')
 
 
-def _get_save_prefix(cfg):
-  return 'results'
-
-
-def _get_eval_bundle_dir(cfg):
+def get_eval_bundle_dir(cfg):
   if cfg.cluster_id == 'mpi':
     return '/fast/jsingh/data/nanochat-dclm-core/eval_bundle'
   elif cfg.cluster_id in ['alpha', 'capella']:
@@ -126,24 +123,23 @@ def eval_dclm_core(cfg):
 
   from src.eval.core_eval import evaluate_task
 
+  assert os.path.exists(cfg.ckpt_path), 'Provided checkpoint path does not exist!'
+
   device = 'cpu'
   if torch.cuda.is_available():
     device = 'cuda'
   elif torch.mps.is_available():
     device = 'mps'
 
-  base_folder = _get_results_base(cfg)
-  save_prefix = _get_save_prefix(cfg)
-
   model = setup_model(cfg)
   model = model.to(device=device, dtype=torch.bfloat16)
   model.eval()
   print(model)
 
-  hf_tokenizer = AutoTokenizer.from_pretrained(cfg.tokenizer_path)
+  hf_tokenizer = AutoTokenizer.from_pretrained(cfg.tokenizer_path, model_max_length=2048)
   tokenizer = HFTokenizerAdapter(hf_tokenizer)
 
-  eval_bundle_dir = _get_eval_bundle_dir(cfg)
+  eval_bundle_dir = get_eval_bundle_dir(cfg)
   config_path = os.path.join(eval_bundle_dir, 'core.yaml')
   data_base_path = os.path.join(eval_bundle_dir, 'eval_data')
   eval_meta_path = os.path.join(eval_bundle_dir, 'eval_meta_data.csv')
@@ -197,7 +193,7 @@ def eval_dclm_core(cfg):
     'centered_results': centered_results,
     'core_metric': core_metric,
   }
-  output_path = os.path.join(base_folder, f'{save_prefix}_dclm_core.json')
+  output_path = get_save_path(cfg)
   os.makedirs(os.path.dirname(output_path), exist_ok=True)
   with open(output_path, 'w') as f:
     json.dump(output, f, indent=2)

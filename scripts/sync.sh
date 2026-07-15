@@ -31,4 +31,4 @@ echo $CLUSTER_ID $PROJECT
 
 cd $PROJECT
 
-python -m services.sync --cluster_id $CLUSTER_ID
+python -m services.sync.one_by_one --cluster_id $CLUSTER_ID
