@@ -44,9 +44,6 @@ from nanochat.engine import Engine
 from nanochat.loss_eval import evaluate_bpb
 from nanochat.tokenizer import get_token_bytes
 
-# -----------------------------------------------------------------------------
-# CORE evaluation
-
 EVAL_BUNDLE_URL = 'https://karpathy-public.s3.us-west-2.amazonaws.com/eval_bundle.zip'
 
 
@@ -125,10 +122,6 @@ def evaluate_core(model, tokenizer, device, max_per_task=-1):
   core_metric = sum(centered_results.values()) / len(centered_results)
   out = {'results': results, 'centered_results': centered_results, 'core_metric': core_metric}
   return out
-
-
-# -----------------------------------------------------------------------------
-# Main
 
 
 def main():
