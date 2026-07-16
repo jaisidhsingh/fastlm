@@ -13,6 +13,8 @@ from absl import app, flags
 
 from src.constants import *
 from src.models.construct import *
+from src.utils.base_utils import parse_arch_id
+
 
 DEFAULT_MODEL_CONFIG = {
   'arch_id': 'attn',
@@ -126,7 +128,9 @@ def parse_input(cfg):
     assert cfg.arch_id is not None, 'Something must be given to run the eval.'
   if cfg.config is not None:
     assert cfg.job_idx is not None, 'job_idx needed if config is not None.'
-    config_dict = yaml.safe_load(cfg.config)
+    with open(cfg.config, 'r') as f:
+      config_dict = yaml.safe_load(f)
+    assert isinstance(config_dict, dict), "What"
     cfg.arch_id = config_dict['arch_id']
     cfg.n = config_dict['n']
     cfg.d = config_dict['d'][int(cfg.job_idx)]
@@ -140,9 +144,9 @@ def main(cfg):
 
   from src.eval.core_eval import evaluate_task
 
+  parse_input(cfg)
   assert os.path.exists(cfg.ckpt_path), 'Provided checkpoint path does not exist!'
 
-  parse_input(cfg)
   device = 'cpu'
   if torch.cuda.is_available():
     device = 'cuda'

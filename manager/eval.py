@@ -3,7 +3,7 @@ import typing as tp
 from copy import deepcopy
 from dataclasses import dataclass
 from types import SimpleNamespace
-
+import os
 import tyro
 import yaml
 from beartype import beartype
@@ -37,8 +37,8 @@ class Config:
 def parse_cfg(input_cfg):
   cfg = deepcopy(input_cfg)
   if input_cfg.d == 'all_parallel':
-    d_index = D_VALUES.index(DMAP[input_cfg.int])
-    cfg.d = ','.join(D_VALUES[:d_index])
+    d_index = D_VALUES.index(DMAP[input_cfg.gbs])
+    cfg.d = ','.join(D_VALUES[:d_index+1])
   return cfg
 
 
@@ -51,21 +51,23 @@ def get_cluster_prefix(cluster_id):
     raise ValueError('Unsupported argument `cluster_id`.')
 
 
-def get_jobfile_path(cfg, eval):
-  return f'{get_cluster_prefix(cfg.cluster_id)}/fastlm/execs/{cfg.arch_id}/{cfg.n}/eval-job_gbs-{cfg.gbs}_lr-{lr_ext}_d-{cfg.d}__{eval}.sub'
+def get_jobfile_path(cfg, eval, dd):
+  lr_ext = str(cfg.lr).replace(".", "p")
+  return f'{get_cluster_prefix(cfg.cluster_id)}/fastlm/execs/{cfg.arch_id}/{cfg.n}/eval-job_gbs-{cfg.gbs}_lr-{lr_ext}_d-{dd}__{eval}.sub'
 
 
-def get_config_path(cfg):
-  return f'{get_cluster_prefix(cfg.cluster_id)}/fastlm/execs/{cfg.arch_id}/{cfg.n}/eval-job_gbs-{cfg.gbs}_lr-{lr_ext}_d-{cfg.d}.yaml'
+def get_config_path(cfg, dd):
+  lr_ext = str(cfg.lr).replace(".", "p")
+  return f'{get_cluster_prefix(cfg.cluster_id)}/fastlm/execs/{cfg.arch_id}/{cfg.n}/eval-job_gbs-{cfg.gbs}_lr-{lr_ext}_d-{dd}.yaml'
 
 
-def get_jobfile_content(cfg, n_jobs, eval):
+def get_jobfile_content(cfg, n_jobs, eval, dd):
   if cfg.cluster_id == 'mpi':
     return f"""# Executable should be a full path
 executable=/home/jsingh/projects/fastlm/cluster/single_gpu/eval_condor.sh
 
 # Hyperparmeters are specified in a YAML configuration file
-config={get_config_path(cfg)}
+config={get_config_path(cfg, dd)}
 
 # Queue as many jobs as points in the hyperaparameter grid
 n_jobs={n_jobs}
@@ -92,8 +94,14 @@ queue $(n_jobs)
 
 
 def main(cli_cfg: Config):
+  print("Started eval management")
+  dd = cli_cfg.d
   cfg = parse_cfg(cli_cfg)
+  subb = cfg.submit
   n_jobs = 1
+
+  os.makedirs(f'{get_cluster_prefix(cfg.cluster_id)}/fastlm/execs/{cfg.arch_id}/{cfg.n}', exist_ok=True)
+
 
   ds = [x.strip() for x in cfg.d.split(',')]
   if ',' in cfg.d:
@@ -103,19 +111,19 @@ def main(cli_cfg: Config):
   config_dict.pop('submit')
   config_dict['d'] = ds
 
-  config_path = get_config_path(cfg)
+  config_path = get_config_path(cfg, dd)
   with open(config_path, 'w') as f:
-    yaml.safe_dump(config_dict, f3)
+    yaml.safe_dump(config_dict, f)
 
   evals = ['dclm_core', 'ruler']
   for eval in evals:
-    jobfile_content = get_jobfile_content(cfg, n_jobs, eval)
-    jobfile_path = get_jobfile_path(cfg, eval)
+    jobfile_content = get_jobfile_content(cfg, n_jobs, eval, dd)
+    jobfile_path = get_jobfile_path(cfg, eval, dd)
 
     with open(jobfile_path, 'w') as f:
       f.write(jobfile_content)
 
-    if cfg.submit == 'yes':
+    if subb == 'yes':
       # set up the batch-job command according to the cluster we're on
       if cfg.cluster_id == 'mpi':
         cmdlist = ['condor_submit_bid', f'{cfg.bid}', jobfile_path]

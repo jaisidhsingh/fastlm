@@ -1,0 +1,10 @@
+arch_id: attn
+bid: 100
+cluster_id: mpi
+d:
+- 0.5B
+- 1.0B
+- 3.0B
+gbs: 32
+lr: 0.001
+n: 150M

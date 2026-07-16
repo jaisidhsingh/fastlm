@@ -1,5 +1,6 @@
 import json
 import os
+import yaml
 import sys
 from dataclasses import dataclass
 from types import SimpleNamespace
@@ -99,7 +100,9 @@ def parse_input(cfg):
     assert cfg.arch_id is not None, 'Something must be given to run the eval.'
   if cfg.config is not None:
     assert cfg.job_idx is not None, 'job_idx needed if config is not None.'
-    config_dict = yaml.safe_load(cfg.config)
+    with open(cfg.config, 'r') as f:
+      config_dict = yaml.safe_load(f)
+    assert isinstance(config_dict, dict), "What"
     cfg.arch_id = config_dict['arch_id']
     cfg.n = config_dict['n']
     cfg.d = config_dict['d'][int(cfg.job_idx)]

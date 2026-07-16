@@ -1,5 +1,5 @@
 import os
-import sys
+import yaml
 from dataclasses import dataclass
 
 import torch
@@ -11,6 +11,9 @@ from src.constants import HF_CKPT_DOWN_FOLDER, SCALING_LADDER
 
 @dataclass
 class DownloadConfig:
+  config: str | None = None
+  job_idx: int | None = None
+  job_cluster: int | None = None
   arch_id: str = 'attn'
   n: str = '150M'
   d: str = '3.0B'
@@ -89,7 +92,23 @@ def validate_hf_stored_ckpt(cfg, path):
         assert f'layers.{i}.token_mixer.w_qkv.weight' in ckpt, err_msg
 
 
+def parse_input(cfg):
+  if cfg.config is None:
+    assert cfg.arch_id is not None, 'Something must be given to run the eval.'
+  if cfg.config is not None:
+    assert cfg.job_idx is not None, 'job_idx needed if config is not None.'
+    with open(cfg.config, 'r') as f:
+      config_dict = yaml.safe_load(f)
+    assert isinstance(config_dict, dict), "What"
+    cfg.arch_id = config_dict['arch_id']
+    cfg.n = config_dict['n']
+    cfg.d = config_dict['d'][int(cfg.job_idx)]
+    cfg.gbs = config_dict['gbs']
+    cfg.lr = config_dict['lr']
+
+
 def main(cfg):
+  parse_input(cfg)
   path = download_ckpt(cfg)
   validate_hf_stored_ckpt(cfg, path)
   print(path)
