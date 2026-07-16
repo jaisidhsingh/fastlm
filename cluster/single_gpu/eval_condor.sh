@@ -15,23 +15,24 @@ cd /home/jsingh/projects/fastlm
 echo "setup done"
 
 nvidia-smi
-module load cuda/12.4
-nvcc --version
 
 # Job specific vars
-config=$1
-job_idx=$2 # CONDOR job arrays range from 0 to n-1
-job_cluster=$3
+bench=$1
+config=$2
+job_idx=$3 # CONDOR job arrays range from 0 to n-1
+job_cluster=$4
+cluster_id="mpi"
 
+mp_cache="/fast/jsingh/tmp/mp/${job_cluster}/${job_idx}"
 mkdir -p /fast/jsingh/tmp/mp/${job_cluster}/${job_idx}
-mkdir -p /fast/jsingh/tmp/wandb/${job_cluster}/${job_idx}
-mkdir -p /fast/jsingh/tmp/triton/${job_cluster}/${job_idx}
-mkdir -p /fast/jsingh/tmp/inductor/${job_cluster}/${job_idx}
-
 export TMPDIR=/fast/jsingh/tmp/mp/${job_cluster}/${job_idx}
-export WANDB_CACHE_DIR=/fast/jsingh/tmp/wandb/${job_cluster}/${job_idx}
-export TRITON_CACHE_DIR=/fast/jsingh/tmp/triton/${job_cluster}/${job_idx}
-export TORCHINDUCTOR_CACHE_DIR=/fast/jsingh/tmp/inductor/${job_cluster}/${job_idx}
 
-# Execute python script
-python -m experiments.eval --config=$config --job_idx=$job_idx --job_cluster=$job_cluster
+ckpt_path=$(python -m services.download.checkpoint --config $config)
+python -m experiments.eval.${bench} \
+  --config=$config \
+  --ckpt_path=$ckpt_path \
+  --job_idx=$job_idx \
+  --job_cluster=$job_cluster \
+  --cluster_id=$cluster_id
+
+rm -rf mp_cache

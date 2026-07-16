@@ -44,8 +44,11 @@ DEFAULT_MODEL_CONFIG = {
 
 @dataclass
 class EvalConfig:
-  arch_id: str
-  ckpt_path: str
+  config: str | None = None
+  ckpt_path: str | None = None
+  job_idx: int | None = None
+  job_cluster: int | None = None
+  arch_id: str | None = None
   n: str = '150M'
   d: str = '3.0B'
   gbs: int = 32
@@ -118,13 +121,28 @@ def get_eval_bundle_dir(cfg):
     raise ValueError('Unsupported value found for --cluster_id')
 
 
-def eval_dclm_core(cfg):
+def parse_input(cfg):
+  if cfg.config is None:
+    assert cfg.arch_id is not None, 'Something must be given to run the eval.'
+  if cfg.config is not None:
+    assert cfg.job_idx is not None, 'job_idx needed if config is not None.'
+    config_dict = yaml.safe_load(cfg.config)
+    cfg.arch_id = config_dict['arch_id']
+    cfg.n = config_dict['n']
+    cfg.d = config_dict['d'][int(cfg.job_idx)]
+    cfg.gbs = config_dict['gbs']
+    cfg.lr = config_dict['lr']
+
+
+@torch.inference_mode()
+def main(cfg):
   from transformers import AutoTokenizer
 
   from src.eval.core_eval import evaluate_task
 
   assert os.path.exists(cfg.ckpt_path), 'Provided checkpoint path does not exist!'
 
+  parse_input(cfg)
   device = 'cpu'
   if torch.cuda.is_available():
     device = 'cuda'
@@ -202,4 +220,4 @@ def eval_dclm_core(cfg):
 
 if __name__ == '__main__':
   cfg = tyro.cli(EvalConfig)
-  eval_dclm_core(cfg)
+  main(cfg)

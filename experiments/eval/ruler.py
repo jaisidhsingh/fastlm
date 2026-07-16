@@ -45,8 +45,11 @@ DEFAULT_MODEL_CONFIG = {
 
 @dataclass
 class EvalConfig:
-  arch_id: str
-  ckpt_path: str
+  config: str | None = None
+  ckpt_path: str | None = None
+  job_idx: int | None = None
+  job_cluster: int | None = None
+  arch_id: str | None = None
   n: str = '150M'
   d: str = '3.0B'
   gbs: int = 32
@@ -91,8 +94,17 @@ def get_save_path(cfg):
   return os.path.join(folder, f'ruler__d-{cfg.d.replace(".", "p")}.json')
 
 
-def _get_save_prefix(cfg):
-  return f'{cfg.arch_id}_n-{cfg.n}_d-{cfg.d.replace(".", "p")}_gbs-{cfg.gbs}'
+def parse_input(cfg):
+  if cfg.config is None:
+    assert cfg.arch_id is not None, 'Something must be given to run the eval.'
+  if cfg.config is not None:
+    assert cfg.job_idx is not None, 'job_idx needed if config is not None.'
+    config_dict = yaml.safe_load(cfg.config)
+    cfg.arch_id = config_dict['arch_id']
+    cfg.n = config_dict['n']
+    cfg.d = config_dict['d'][int(cfg.job_idx)]
+    cfg.gbs = config_dict['gbs']
+    cfg.lr = config_dict['lr']
 
 
 @torch.inference_mode()
@@ -105,6 +117,7 @@ def main(cfg):
   # incl_folder = LM_EVAL_INCLUDE_PATHS[cfg.cluster_id]
   # task_manager = TaskManager(include_path=incl_folder)
 
+  parse_input(cfg)
   assert os.path.exists(cfg.ckpt_path), 'Provided checkpoint path does not exist!'
 
   device = 'cpu'

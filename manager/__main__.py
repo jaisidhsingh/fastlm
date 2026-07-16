@@ -79,56 +79,11 @@ def train_management(cfg: ManagerConfig):
     submit_and_log(cmdlist, cfg, jobfile_path, lr, n_jobs)
 
 
-def eval_management(cfg: ManagerConfig):
-  check_subfolders(cfg)
-  benchmarks = [b.strip() for b in cfg.benchmarks.split(',') if b.strip()]
-
-  # parse learning rate(s) such that each lr gets its own yaml + job file
-  # because checkpoint paths depend on lr and can't be cross-product'ed
-  lrs = parse_input_lr(cfg)
-  if not isinstance(lrs, list):
-    lrs = [lrs]
-
-  for lr in lrs:
-    # build and save the eval config
-    config_path = get_config_path(cfg, lr)
-    config = get_eval_config_content(cfg, lr, benchmarks)
-    with open(config_path, 'w') as f:
-      yaml.safe_dump(config, f, default_flow_style=False)
-
-    # count n_jobs: only `benchmarks` is a list in the config
-    n_jobs = len(benchmarks)
-
-    # build and save the job file
-    jobfile_path = get_jobfile_path(cfg, lr)
-    jobfile_content = get_eval_jobfile_content(cfg, lr, n_jobs, cpus=config['num_workers'])
-    with open(jobfile_path, 'w') as f:
-      f.write(jobfile_content)
-
-    print(f'Wrote config -> {config_path}')
-    print(f'Wrote job    -> {jobfile_path}  (n_jobs={n_jobs})')
-
-    if cfg.submit == 'yes':
-      if cfg.cluster_id == 'mpi':
-        cmdlist = ['condor_submit_bid', f'{cfg.bid}', jobfile_path]
-      elif cfg.cluster_id in ['capella', 'alpha']:
-        cmdlist = ['sbatch', jobfile_path]
-      else:
-        raise ValueError('Unsupported value found for `--cluster_id`.')
-
-      # submit the batch-job and store it
-      submit_and_log(cmdlist, cfg, jobfile_path, lr, n_jobs)
-
-
 def main(cfg: ManagerConfig):
   if cfg.routine == 'train':
     train_management(cfg)
-  elif cfg.routine == 'eval':
-    eval_management(cfg)
   else:
-    raise NotImplementedError(
-      'Supported values for `cfg.routine` are `[train, eval]`. You provided an unsupported value.'
-    )
+    raise NotImplementedError('Supported values for `cfg.routine` are `[train]`. You provided an unsupported value.')
 
 
 if __name__ == '__main__':

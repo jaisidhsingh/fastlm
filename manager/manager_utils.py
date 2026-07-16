@@ -185,56 +185,16 @@ def get_train_config_content(cfg, lr):
   return base_cfg
 
 
-def get_eval_config_content(cfg, lr, benchmarks):
-  mixer, ratio = parse_arch_id(cfg.arch_id)
-
-  lr_str = str(lr).replace('.', 'p')
-  raw_ckpt = os.path.join(
-    SCALING_RESULTS_FOLDER['cfg.cluster_id'],
-    cfg.arch_id,
-    cfg.n,
-    'gbs_wise_results',
-    f'gbs_{cfg.gbs}',
-    'checkpoints',
-    f'lr_{lr_str}',
-    f'ckpt_{cfg.ckpt_token_budget.replace(".", "p")}.pt',
-  )
-
-  return {
-    'benchmarks': benchmarks,
-    'raw_ckpt': raw_ckpt,
-    'tokenizer_path': TOKENIZERS[cfg.cluster_id],
-    # Model arch (must match training)
-    'arch_id': cfg.arch_id,
-    'param_scale_id': cfg.n,
-    'model': 'transformer',
-    'd_model': SCALING_LADDER['models'][cfg.n]['d_model'],
-    'mlp_class': 'glu',
-    'expand': '3.0',
-    'n_layers': SCALING_LADDER['models'][cfg.n]['n_layers'],
-    'n_heads': SCALING_LADDER['models'][cfg.n]['n_heads'],
-    'rms_norm': True,
-    'tie_embeddings': True,
-    'torch_compile': False,
-    'use_flex_attention': False,
-    'token_mixer': mixer,
-    'hybrid_mixer_ratio': ratio,
-    'layer_norm_scaling': False,
-    'residual_connection': 'add',
-    'attn_gate': True,
-    'attn_qk_norm': True,
-    'gdn_conv_size': 4,
-    'gdn_gate': True,
-    'gdn_neg_eigval': True,
-    'intra_doc_masking': True,
-    # Data
-    'vocab_size': 50304,
-    'seq_len': 2048,
-    'dtype': 'bfloat16',
-    # Used for results folder path
-    'global_batch_size': cfg.gbs,
-    'lr': lr,
-  }
+def get_eval_config_content(cfg):
+  # cfg is supposed to have the following attributes:
+  #   arch_id
+  #   n
+  #   d
+  #   gbs
+  #   lr
+  out = vars(cfg)
+  out['d'] = [x.strip() for x in cfg.d.split(',')]
+  return out
 
 
 def get_train_jobfile_content(cfg, lr, n_jobs, cpus=8):
@@ -382,53 +342,6 @@ requirements = (TARGET.CUDADeviceName == "NVIDIA A100-SXM4-80GB" || TARGET.CUDAD
 
 queue $(n_jobs)
     """
-  elif cfg.cluster_id == 'alpha':
-    return f"""#!/bin/bash
-#SBATCH --output=/data/horse/ws/jasi149i-fastlm/logs/june/out/job-%A_%a.out
-#SBATCH --error=/data/horse/ws/jasi149i-fastlm/logs/june/err/job-%A_%a.err
-#SBATCH --nodes=1
-#SBATCH --ntasks=1
-#SBATCH --exclude=i8009
-#SBATCH --cpus-per-task={cpus}
-#SBATCH --mem={mem}G
-#SBATCH --gres=gpu:1
-#SBATCH --job-name={name}
-#SBATCH --array=0-{n_jobs_minus_1}
-
-EXECUTABLE=/home/jsingh/projects/fastlm/cluster/single_gpu/eval_alpha.sh
-
-CONFIG={get_config_path(cfg, lr)}
-
-LOGS_DIR=/fast/jsingh/logs/fastlm/june/eval
-mkdir -p "$LOGS_DIR/err" "$LOGS_DIR/out" "$LOGS_DIR/log"
-
-srun "$EXECUTABLE" "$CONFIG" "$SLURM_ARRAY_TASK_ID" "$SLURM_JOB_ID"
-"""
-
-  elif cfg.cluster_id == 'capella':
-    return f"""#!/bin/bash
-#SBATCH --output=/data/horse/ws/jasi149i-fastlm/logs/june/out/job-%A_%a.out
-#SBATCH --error=/data/horse/ws/jasi149i-fastlm/logs/june/err/job-%A_%a.err
-#SBATCH --nodes=1
-#SBATCH --ntasks=1
-#SBATCH --cpus-per-task={cpus}
-#SBATCH --mem={mem}G
-#SBATCH --gres=gpu:1
-#SBATCH --exclude=c4
-#SBATCH --job-name={name}
-#SBATCH --array=0-{n_jobs_minus_1}
-
-EXECUTABLE=/home/jsingh/projects/fastlm/cluster/single_gpu/eval_capella.sh
-
-CONFIG={get_config_path(cfg, lr)}
-
-LOGS_DIR=/fast/jsingh/logs/fastlm/june/eval
-mkdir -p "$LOGS_DIR/err" "$LOGS_DIR/out" "$LOGS_DIR/log"
-
-srun "$EXECUTABLE" "$CONFIG" "$SLURM_ARRAY_TASK_ID" "$SLURM_JOB_ID"
-"""
-  else:
-    raise ValueError('Unsupported value of cli-arg `--cluster_id` provided')
 
 
 def submit_and_log(cmdlist, cfg, jobfile_path, lr, n_jobs):
