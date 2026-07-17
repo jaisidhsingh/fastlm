@@ -1,0 +1,12 @@
+arch_id: gdn+attn_3-1
+bid: 100
+cluster_id: mpi
+d:
+- 0.5B
+- 1.0B
+- 3.0B
+- 7.5B
+- 15.0B
+gbs: 64
+lr: 0.001
+n: 150M
