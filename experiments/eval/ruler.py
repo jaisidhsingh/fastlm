@@ -86,7 +86,7 @@ def setup_model_and_save(cfg, hf_model_save_folder):
 
 def get_save_path(cfg):
   folder = os.path.join(
-    PROJECT_REPO_ROOT[cfg.cluster_id],
+    EVAL_RESULT_PATHS[cfg.cluster_id],
     cfg.arch_id,
     cfg.n,
     f'gbs_{cfg.gbs}__lr_{str(cfg.lr).replace(".", "p")}',

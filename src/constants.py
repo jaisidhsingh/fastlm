@@ -159,6 +159,11 @@ LM_EVAL_INCLUDE_PATHS = {
   'capella': '/data/horse/ws/jasi149i-fastlm/hf_sync_results/lm_eval_include_paths',
   'alpha': '/data/horse/ws/jasi149i-fastlm/hf_sync_results/lm_eval_include_paths',
 }
+EVAL_RESULT_PATHS = {
+  'mpi': '/fast/jsingh/projects/fastlm/hf_sync_results/evals',
+  'capella': '/data/horse/ws/jasi149i-fastlm/hf_sync_results/evals',
+  'alpha': '/data/horse/ws/jasi149i-fastlm/hf_sync_results/evals',
+}
 ARCH_IDS = ['attn', 'gdn+attn_1-3', 'gdn+attn_1-1', 'gdn+attn_3-1', 'gdn']
 DEFAULT_CONFIG = {
   'deterministic': False,

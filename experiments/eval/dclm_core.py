@@ -105,7 +105,7 @@ def setup_model(cfg):
 
 def get_save_path(cfg):
   folder = os.path.join(
-    PROJECT_REPO_ROOT[cfg.cluster_id],
+    EVAL_RESULT_PATHS[cfg.cluster_id],
     cfg.arch_id,
     cfg.n,
     f'gbs_{cfg.gbs}__lr_{str(cfg.lr).replace(".", "p")}',
