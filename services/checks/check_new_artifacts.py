@@ -10,7 +10,7 @@ from services.utils import (
 )
 
 _SERVICES_DIR = os.path.dirname(os.path.abspath(__file__))
-_INVENTORIES_DIR = os.path.join(_SERVICES_DIR, 'inventories')
+_INVENTORIES_DIR = os.path.join(os.path.dirname(_SERVICES_DIR), 'inventories')
 _HF_INVENTORY_PATH = os.path.join(_INVENTORIES_DIR, 'hf_inventory.json')
 
 
