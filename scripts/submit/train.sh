@@ -28,8 +28,8 @@ echo $CLUSTER_ID $PROJECT
 cd $PROJECT
 
 arch_id=("attn")
-n=("150M" "300M")
-gbs=(128)
+n=("20M" "50M")
+gbs=(256)
 lr="all_parallel"
 mode="main"
 bid=100
