@@ -40,7 +40,7 @@ model: transformer
 n_heads: 8
 n_layers: 12
 num_evals: 20
-num_workers: 4
+num_workers: 8
 optim: adamw
 param_scale_id: 50M
 print_progress: true
