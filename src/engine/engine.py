@@ -121,6 +121,32 @@ def _move_to_device(batch, seq_len, device, intra_doc_masking, use_flex_attentio
   return inputs, targets, attn_mask, linear_masks, cu_seqlens
 
 
+def apply_compile(model: nn.Module):
+  blocks = getattr(model, 'layers')
+  assert blocks is not None, 'Error: `model.layers` is set to `None`.'
+
+  for layer_id, block in blocks.named_children():
+    block = torch.compile(block)
+    blocks[int(layer_id)] = block
+
+  if not model.cfg.tie_weights:
+    embeddings_key = 'embed_tokens'
+    embeddings = torch.compile(getattr(model, embeddings_key), fullgraph=True)
+    model.register_module(embeddings_key, embeddings)
+
+  norm_key = 'out_norm'
+  norm = torch.compile(getattr(model, norm_key), fullgraph=True)
+  model.register_module(norm_key, norm)
+
+  if not model.cfg.tie_weights:
+    lm_head_key = 'lm_head'
+    lm_head = torch.compile(getattr(model, lm_head_key), fullgraph=True)
+    model.register_module(lm_head_key, lm_head)
+
+  print('Compiling the entire model with torch.compile')
+  return torch.compile(model)
+
+
 class TorchEngine(torch.nn.Module):
   def __init__(self, model, cfg, device, local_rank, ckpt):
     super().__init__()
@@ -155,7 +181,7 @@ class TorchEngine(torch.nn.Module):
     # Compile
     if cfg.torch_compile:
       print('Compiling the model...')
-      self.model = torch.compile(self.model)
+      self.model = apply_compile(self.model)
 
     # AMP
     device_type = 'cuda' if 'cuda' in device else 'cpu'
