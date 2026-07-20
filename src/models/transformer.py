@@ -77,7 +77,14 @@ class Block(nn.Module):
     self.mlp_norm = RMSNorm(cfg.dim, cfg.rmsnorm_eps)
     self.layer_norm_scaling = 1.0 if not cfg.layer_norm_scaling else 1 / math.sqrt(layer_id + 1)
 
-  def forward(self, x, freqs_cis, attention_mask, linear_mask, cu_seqlens):
+  def forward(
+    self,
+    x: torch.Tensor,
+    freqs_cis: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    linear_mask: torch.Tensor | None,
+    cu_seqlens: torch.Tensor | None,
+  ) -> torch.Tensor:
     # x: (bsz, seqlen, dim)
     h = self.layer_norm_scaling * self.token_mixer_norm(x)
     h = self.token_mixer(
@@ -94,7 +101,7 @@ class Block(nn.Module):
 
 
 class Transformer(nn.Module):
-  def __init__(self, cfg):
+  def __init__(self, cfg: ModelConfig):
     super().__init__()
     self.cfg = cfg
     self.n_layers = cfg.n_layers
@@ -123,7 +130,7 @@ class Transformer(nn.Module):
       print(type(self.layers[0].token_mixer).__name__)
       print(type(self.layers[self.hybrid_mixer_ratio].token_mixer).__name__)
 
-  def _prepare_layers(self, cfg):
+  def _prepare_layers(self, cfg: ModelConfig):
     if '+' in cfg.token_mixer:
       token_mixers = cfg.token_mixer.split('+')
       assert len(token_mixers) == 2, 'Only support two token mixers for now'
@@ -157,7 +164,13 @@ class Transformer(nn.Module):
 
     return nn.ModuleList(layers)
 
-  def forward(self, x, attention_mask=None, linear_mask=None, cu_seqlens=None):
+  def forward(
+    self,
+    x: torch.Tensor,
+    attention_mask: torch.Tensor | None = None,
+    linear_mask: torch.Tensor | None = None,
+    cu_seqlens: torch.Tensor | None = None,
+  ) -> torch.Tensor:
     # x: (bsz, seqlen)
     seqlen = x.shape[1]
     x = self.embed_tokens(x)  # (bsz, seqlen, dim)
@@ -168,7 +181,7 @@ class Transformer(nn.Module):
 
     return self.lm_head(self.out_norm(x))  # (bsz, seqlen, vocab_size)
 
-  def _init_weights(self, module):
+  def _init_weights(self, module: nn.Module):
     if isinstance(module, nn.Linear):
       torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
       if module.bias is not None:
@@ -188,7 +201,7 @@ class Transformer(nn.Module):
   def tie_weights(self):
     self.lm_head.weight = self.embed_tokens.weight
 
-  def count_params(self, non_embedding=True):
+  def count_params(self, non_embedding: bool = True):
     embedding_size = self.embed_tokens.weight.numel()
     n_params_in_layers = sum(p.numel() for p in self.layers.parameters())
     n_params_in_out_norm = sum(p.numel() for p in self.out_norm.parameters())
