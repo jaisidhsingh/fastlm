@@ -40,11 +40,13 @@ export WANDB_CACHE_DIR=/fast/jsingh/tmp/wandb/${job_cluster}/${job_idx}
 export TRITON_CACHE_DIR=/fast/jsingh/tmp/triton/${job_cluster}/${job_idx}
 export TORCHINDUCTOR_CACHE_DIR=/fast/jsingh/tmp/inductor/${job_cluster}/${job_idx}
 
-master_port=$((10000 + (ClusterId + ProcId) % 50000))
-export MASTER_PORT=$((10000 + (ClusterId + ProcId) % 50000))
+
+# standalone avoids having to specify this
+# master_port=$((15000 + ((SLURM_JOB_ID * 131 + SLURM_ARRAY_TASK_ID) % 45000)))
+# export MASTER_PORT=$master_port
 
 # Execute python script
-torchrun --master-port=$master_port --nproc_per_node=$dp -m experiments.train \
+torchrun --nnodes=1 --standalone --master-port=$master_port --nproc_per_node=$dp -m experiments.train \
   --config=$config \
   --job_idx=$job_idx \
   --job_cluster=$job_cluster \

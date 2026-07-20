@@ -33,7 +33,7 @@ export MASTER_PORT=$master_port
 
 # Execute python script
 cd /projects/p_neurasearch/fastlm
-torchrun --master-port=$master_port --nproc_per_node=$DP -m experiments.train \
+torchrun --master-port=$master_port --nnodes=1 --standalone --nproc_per_node=$DP -m experiments.train \
   --config=$CONFIG \
   --job_idx=$SLURM_ARRAY_TASK_ID \
   --job_cluster=$SLURM_JOB_ID \

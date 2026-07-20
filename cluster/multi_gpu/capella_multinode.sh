@@ -44,6 +44,7 @@ cd /projects/p_neurasearch/fastlm
 srun torchrun \
     --nnodes="${SLURM_NNODES}" \
     --nproc-per-node=4 \
+    --rdzv_backend=c10d \
     --node-rank="${SLURM_NODEID}" \
     --master-addr="${MASTER_ADDR}" \
     --master-port="${MASTER_PORT}" \
