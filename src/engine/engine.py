@@ -129,7 +129,7 @@ def apply_compile(model: torch.nn.Module) -> torch.nn.Module:
     block = torch.compile(block)
     blocks[int(layer_id)] = block
 
-  if not model.cfg.tie_weights:
+  if not model.cfg.tie_embeddings:
     embeddings_key = 'embed_tokens'
     embeddings = torch.compile(getattr(model, embeddings_key), fullgraph=True)
     model.register_module(embeddings_key, embeddings)
@@ -138,7 +138,7 @@ def apply_compile(model: torch.nn.Module) -> torch.nn.Module:
   norm = torch.compile(getattr(model, norm_key), fullgraph=True)
   model.register_module(norm_key, norm)
 
-  if not model.cfg.tie_weights:
+  if not model.cfg.tie_embeddings:
     lm_head_key = 'lm_head'
     lm_head = torch.compile(getattr(model, lm_head_key), fullgraph=True)
     model.register_module(lm_head_key, lm_head)

@@ -93,7 +93,7 @@ class Block(nn.Module):
       attention_mask=attention_mask,
       linear_mask=linear_mask,
       cu_seqlens=cu_seqlens,
-    )
+    )[0]
     x = x + h
     h = self.layer_norm_scaling * self.mlp_norm(x)
     x = x + self.mlp(h)

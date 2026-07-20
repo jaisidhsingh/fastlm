@@ -87,4 +87,6 @@ class GatedAttention(nn.Module):
 
     if self.use_gate:
       out = out * torch.sigmoid(self.w_gate(hidden_states))
-    return self.w_out(out)
+    out = self.w_out(out)
+    return out, None, None
+

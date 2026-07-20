@@ -31,5 +31,7 @@ module load cuda/12.4
 nvidia-smi
 nvcc --version
 
-CONFIG=$PROJECT"src/configs/int/hybrid_3-1_300M.yaml"
-python -m experiments.train --config=$CONFIG
+CONFIG=$PROJECT"/src/config/int/hybrid_3-1_300M.yaml"
+
+export TORCHDYNAMO_VERBOSE=1
+python -m experiments.train --config $CONFIG --cluster_id $CLUSTER_ID
