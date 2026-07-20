@@ -121,7 +121,7 @@ def _move_to_device(batch, seq_len, device, intra_doc_masking, use_flex_attentio
   return inputs, targets, attn_mask, linear_masks, cu_seqlens
 
 
-def apply_compile(model: nn.Module):
+def apply_compile(model: torch.nn.Module) -> torch.nn.Module:
   blocks = getattr(model, 'layers')
   assert blocks is not None, 'Error: `model.layers` is set to `None`.'
 
