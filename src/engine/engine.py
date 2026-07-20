@@ -185,7 +185,8 @@ class TorchEngine(torch.nn.Module):
     if torch.distributed.is_initialized():
       self.model = DDP(self.model, device_ids=[local_rank])
 
-    # AMP
+    # AMP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
+
     device_type = 'cuda' if 'cuda' in device else 'cpu'
     ptdtype = {'float32': torch.float32, 'bfloat16': torch.bfloat16, 'float16': torch.float16}[self.dtype]
     self.ctx = nullcontext() if device_type == 'cpu' else torch.amp.autocast(device_type=device_type, dtype=ptdtype)
