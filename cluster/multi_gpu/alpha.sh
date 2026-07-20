@@ -28,8 +28,8 @@ export WANDB_CACHE_DIR=$wandb_cache
 export TRITON_CACHE_DIR=$triton_cache
 export TORCHINDUCTOR_CACHE_DIR=$inductor_cache
 
-master_port=$((10000 + $SLURM_JOB_ID % 1000 + $SLURM_ARRAY_TASK_ID))
-export MASTER_PORT=$((10000 + $SLURM_JOB_ID % 1000 + $SLURM_ARRAY_TASK_ID))
+master_port=$((15000 + ((SLURM_JOB_ID * 131 + SLURM_ARRAY_TASK_ID) % 45000)))
+export MASTER_PORT=$master_port
 
 # Execute python script
 cd /projects/p_neurasearch/fastlm

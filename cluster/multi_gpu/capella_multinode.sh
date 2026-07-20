@@ -32,7 +32,7 @@ export TRITON_CACHE_DIR=$triton_cache
 export TORCHINDUCTOR_CACHE_DIR=$inductor_cache
 
 export MASTER_ADDR=$(scontrol show hostnames "$SLURM_JOB_NODELIST" | head -n 1)
-export MASTER_PORT=$((10000 + SLURM_JOB_ID % 1000 + SLURM_ARRAY_TASK_ID))
+export MASTER_PORT=$((15000 + ((SLURM_JOB_ID * 131 + SLURM_ARRAY_TASK_ID) % 45000)))
 
 echo "MASTER_ADDR=${MASTER_ADDR}"
 echo "MASTER_PORT=${MASTER_PORT}"
