@@ -31,7 +31,7 @@ module load cuda/12.4
 nvidia-smi
 nvcc --version
 
-CONFIG=$PROJECT"/src/config/int/hybrid_3-1_300M.yaml"
+CONFIG=$PROJECT"/src/config/int/hybrid_1-3_300M.yaml"
 DP=$1
 
 export TORCHDYNAMO_VERBOSE=1
