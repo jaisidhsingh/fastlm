@@ -46,7 +46,7 @@ export TORCHINDUCTOR_CACHE_DIR=/fast/jsingh/tmp/inductor/${job_cluster}/${job_id
 # export MASTER_PORT=$master_port
 
 # Execute python script
-torchrun --nnodes=1 --standalone --master-port=$master_port --nproc_per_node=$dp -m experiments.train \
+torchrun --nnodes=1 --standalone --nproc_per_node=$dp -m experiments.train \
   --config=$config \
   --job_idx=$job_idx \
   --job_cluster=$job_cluster \

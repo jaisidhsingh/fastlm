@@ -173,15 +173,17 @@ class TorchEngine(torch.nn.Module):
       model.load_state_dict(ckpt['state_dict'])
       self.micro_steps = ckpt['step'] * cfg.grad_accumulation_steps
 
-    # Move model to device and to DDP
+    # Move model to device
     self.model = model.to(device)
-    if torch.distributed.is_initialized():
-      self.model = DDP(self.model, device_ids=[local_rank])
 
     # Compile
     if cfg.torch_compile:
       print('Compiling the model...')
       self.model = apply_compile(self.model)
+    
+    # Move to DDP after custom compile
+    if torch.distributed.is_initialized():
+      self.model = DDP(self.model, device_ids=[local_rank])
 
     # AMP
     device_type = 'cuda' if 'cuda' in device else 'cpu'
