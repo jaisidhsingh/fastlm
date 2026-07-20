@@ -47,10 +47,17 @@ class GatedAttention(nn.Module):
       self.q_norm = RMSNorm(self.head_dim, cfg.rmsnorm_eps)
       self.k_norm = RMSNorm(self.head_dim, cfg.rmsnorm_eps)
 
-  def forward(self, x, freqs_cis: torch.Tensor | None, attention_mask: torch.Tensor | None = None):
-    bsz, seqlen, d = x.shape  # (bsz, seqlen, d)
+  def forward(
+    self,
+    hidden_states: torch.Tensor,
+    freqs_cis: torch.Tensor | None,
+    attention_mask: torch.Tensor | None = None,
+    linear_mask: torch.Tensor | None = None,
+    cu_seqlens: torch.Tensor | None = None,
+  ):
+    bsz, seqlen, d = hidden_states.shape  # (bsz, seqlen, d)
 
-    q, k, v = self.w_qkv(x).split(d, dim=2)  # (bsz, seqlen, d)
+    q, k, v = self.w_qkv(hidden_states).split(d, dim=2)  # (bsz, seqlen, d)
     q = q.view(bsz, seqlen, self.n_heads, self.head_dim)  # (bsz, seqlen, nh, h_dim)
     k = k.view(bsz, seqlen, self.n_heads, self.head_dim)  # (bsz, seqlen, nh, h_dim)
     v = v.view(bsz, seqlen, self.n_heads, self.head_dim).to(dtype=self.dtype)  # (bsz, seqlen, nh, h_dim)
@@ -79,5 +86,5 @@ class GatedAttention(nn.Module):
     out = out.transpose(1, 2).contiguous().view(bsz, seqlen, d)  # (bsz, seqlen, d)
 
     if self.use_gate:
-      out = out * torch.sigmoid(self.w_gate(x))
+      out = out * torch.sigmoid(self.w_gate(hidden_states))
     return self.w_out(out)

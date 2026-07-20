@@ -50,9 +50,10 @@ class Block(nn.Module):
   def __init__(self, layer_id: int, token_mixer_type: str, cfg: ModelConfig):
     super().__init__()
     assert token_mixer_type in SUPPORTED_TOKEN_MIXERS, 'Input token mixer is not supported'
-
+    self.dense_attn = False
     if token_mixer_type == 'attn':
       self.token_mixer = GatedAttention(cfg)
+      self.dense_attn = True
 
     elif token_mixer_type == 'gdn':
       self.token_mixer = GatedDeltaNet(
@@ -64,44 +65,31 @@ class Block(nn.Module):
         conv_size=cfg.gdn_conv_size,
         intra_doc=cfg.intra_doc,
       )
+    else:
+      raise NotImplementedError('Unsupported value of `token_mixer_type`.')
+
     self.mlp = MLP_CLASSES[cfg.mlp](dim=cfg.dim, hidden_dim=int(cfg.expand * cfg.dim))
 
     self.layer_id = layer_id
     self.residual_connection = cfg.residual_connection
 
-    if self.residual_connection == 'add':
-      self.token_mixer_norm = RMSNorm(cfg.dim, cfg.rmsnorm_eps)
-      self.mlp_norm = RMSNorm(cfg.dim, cfg.rmsnorm_eps)
-      self.layer_norm_scaling = cfg.layer_norm_scaling
-
-    if self.residual_connection != 'add':
-      self.attn_mhc = lambda x: x
-      self.mlp_mhc = lambda x: x
+    self.token_mixer_norm = RMSNorm(cfg.dim, cfg.rmsnorm_eps)
+    self.mlp_norm = RMSNorm(cfg.dim, cfg.rmsnorm_eps)
+    self.layer_norm_scaling = 1.0 if not cfg.layer_norm_scaling else 1 / math.sqrt(layer_id + 1)
 
   def forward(self, x, freqs_cis, attention_mask, linear_mask, cu_seqlens):
     # x: (bsz, seqlen, dim)
-    if self.residual_connection == 'add':
-      scaling = 1.0 if not self.layer_norm_scaling else 1 / math.sqrt(self.layer_id + 1)
-
-      o = None
-      if isinstance(self.token_mixer, GatedAttention):
-        o = self.token_mixer(scaling * self.token_mixer_norm(x), freqs_cis, attention_mask)
-
-      elif isinstance(self.token_mixer, GatedDeltaNet):
-        o, _, past_key_values = self.token_mixer(
-          hidden_states=scaling * self.token_mixer_norm(x), attention_mask=linear_mask, cu_seqlens=cu_seqlens
-        )
-
-      else:
-        raise NotImplementedError('Unsupported value encountered for `cfg.token_mixer`')
-
-      x = x + o
-      x = x + self.mlp(scaling * self.mlp_norm(x))
-
-    # not supported rn
-    elif self.residual_connection == 'mhc':
-      raise NotImplementedError('Manifold-Constrained HyperConnections are currently not supported.')
-
+    h = self.layer_norm_scaling * self.token_mixer_norm(x)
+    h = self.token_mixer(
+      hidden_states=h,
+      freqs_cis=freqs_cis,
+      attention_mask=attention_mask,
+      linear_mask=linear_mask,
+      cu_seqlens=cu_seqlens,
+    )
+    x = x + h
+    h = self.layer_norm_scaling * self.mlp_norm(x)
+    x = x + self.mlp(h)
     return x
 
 

@@ -203,15 +203,17 @@ class GatedDeltaNet(nn.Module):
   def forward(
     self,
     hidden_states: torch.Tensor,
+    freqs_cis: torch.Tensor | None = None,
     attention_mask: torch.Tensor | None = None,
+    linear_mask: torch.Tensor | None = None,
     past_key_values: Cache | None = None,
     use_cache: bool | None = False,
     output_attentions: bool | None = False,
     **kwargs: Unpack[dict],
   ) -> tuple[torch.Tensor, torch.Tensor | None, Cache | None]:
-    if attention_mask is not None:
-      assert len(attention_mask.shape) == 2, (
-        'Expected attention_mask as a 0-1 matrix with shape [batch_size, seq_len] '
+    if linear_mask is not None:
+      assert len(linear_mask.shape) == 2, (
+        'Expected linear_mask as a 0-1 matrix with shape [batch_size, seq_len] '
         'for padding purposes (0 indicating padding). '
         'Arbitrary attention masks of shape [batch_size, seq_len, seq_len] are not allowed.'
       )
@@ -221,9 +223,9 @@ class GatedDeltaNet(nn.Module):
 
     indices = torch.arange(int(_bsz * _ctxlen)).to(dtype=torch.int32, device=hidden_states.device)
     cu_seqlens = kwargs.get('cu_seqlens')
-    if cu_seqlens is not None and self.intra_doc and attention_mask is not None:
+    if cu_seqlens is not None and self.intra_doc and linear_mask is not None:
       hidden_states = hidden_states.reshape(1, -1, _tmpdim).contiguous()
-      attention_mask = attention_mask.reshape(1, -1).contiguous()
+      linear_mask = linear_mask.reshape(1, -1).contiguous()
 
     batch_size, q_len, _ = hidden_states.shape
     # change to inference mode.
@@ -233,8 +235,8 @@ class GatedDeltaNet(nn.Module):
 
     last_state = get_layer_cache(self, past_key_values)
 
-    if cu_seqlens is None and attention_mask is not None:
-      indices, cu_seqlens, _ = get_unpad_data(attention_mask[:, -q_len:])
+    if cu_seqlens is None and linear_mask is not None:
+      indices, cu_seqlens, _ = get_unpad_data(linear_mask[:, -q_len:])
       hidden_states = index_first_axis(rearrange(hidden_states, 'b s ... -> (b s) ...'), indices).unsqueeze(0)
 
     if self.use_short_conv:
@@ -324,10 +326,10 @@ class GatedDeltaNet(nn.Module):
       o = self.o_norm(o)
     o = rearrange(o, 'b t h d -> b t (h d)')
     o = self.o_proj(o)
-    if attention_mask is not None:
+    if linear_mask is not None:
       o = pad_input(o.squeeze(0), indices, batch_size, q_len)
 
     if self.intra_doc:
       o = o.reshape(_bsz, _ctxlen, _tmpdim).contiguous()
-      attention_mask = attention_mask.reshape(_bsz, _ctxlen).contiguous()
+      linear_mask = linear_mask.reshape(_bsz, _ctxlen).contiguous()
     return o, None, past_key_values
