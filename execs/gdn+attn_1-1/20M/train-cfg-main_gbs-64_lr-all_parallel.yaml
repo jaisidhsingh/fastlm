@@ -1,4 +1,4 @@
-arch_id: gdn+attn_1-3
+arch_id: gdn+attn_1-1
 attn_gate: true
 attn_qk_norm: true
 beta1: 0.9
@@ -10,7 +10,7 @@ deterministic: false
 dtype: bfloat16
 eval: true
 eval_every_steps: -1
-exp_name: gdn+attn_1-3-20M_gbs-64
+exp_name: gdn+attn_1-1-20M_gbs-64
 expand: '3.0'
 fused_optim: true
 gdn_conv_size: 4
@@ -70,6 +70,6 @@ wandb_dir: /data/horse/ws/jasi149i-fastlm/wandb_logs
 wandb_entity: msc-thesis-jaisidh
 wandb_mode: offline
 wandb_project: hparam-sweep
-wandb_run_name: gdn+attn_1-3-20M_gbs-64
+wandb_run_name: gdn+attn_1-1-20M_gbs-64
 warmup_steps: 2000
 weight_decay: 0.1
