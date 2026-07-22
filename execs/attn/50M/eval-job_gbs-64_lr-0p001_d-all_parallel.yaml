@@ -1,4 +1,4 @@
-arch_id: gdn+attn_3-1
+arch_id: attn
 bench: dclm_core
 bid: 100
 cluster_id: mpi
@@ -10,4 +10,4 @@ d:
 - 15.0B
 gbs: 64
 lr: 0.001
-n: 150M
+n: 50M

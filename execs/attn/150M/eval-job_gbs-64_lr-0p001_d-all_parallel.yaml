@@ -1,4 +1,5 @@
 arch_id: attn
+bench: dclm_core
 bid: 100
 cluster_id: mpi
 d:

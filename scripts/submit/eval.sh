@@ -28,23 +28,25 @@ echo $CLUSTER_ID $PROJECT
 cd $PROJECT
 
 arch_id=("attn" "gdn" "gdn+attn_3-1")
-n="150M"
-d="15.0B"
+n=("50M" "150M")
+d="all_parallel"
 gbs=64
 lr=0.001
 bid=100
 submit="yes"
-bench="dclm_core,ruler"
+bench="dclm_core"
 
 for aid in "${arch_id[@]}"; do
-  python -m manager.eval \
-    --arch_id $aid \
-    --n $n \
-    --d $d \
-    --gbs $gbs \
-    --lr $lr \
-    --bid $bid \
-    --submit $submit \
-    --bench $bench \
-    --cluster_id $CLUSTER_ID;
+	for nid in "${n[@]}"; do
+		python -m manager.eval \
+			--arch_id $aid \
+			--n $nid \
+			--d $d \
+			--gbs $gbs \
+			--lr $lr \
+			--bid $bid \
+			--submit $submit \
+			--bench $bench \
+			--cluster_id $CLUSTER_ID;
+	done
 done
