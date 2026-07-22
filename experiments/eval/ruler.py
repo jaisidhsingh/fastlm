@@ -149,8 +149,9 @@ def main(cfg):
   )
 
   output_path = get_save_path(cfg)
+  res2save = {k: str(v) for k, v in results['results'].items()}
   with open(output_path, 'w') as f:
-    json.dump(results, f)
+    json.dump(res2save, f)
 
   print(f'RULER results saved to {output_path}')
   print('Evaluation complete.')
