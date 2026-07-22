@@ -32,6 +32,7 @@ class Config:
   bid: int
   submit: str
   cluster_id: str
+  bench: str
 
 
 def parse_cfg(input_cfg):
@@ -95,6 +96,7 @@ queue $(n_jobs)
 
 def main(cli_cfg: Config):
   print("Started eval management")
+  benchmarks = [x for x in cli_cfg.bench.split(",") if len(x) > 0]
   dd = cli_cfg.d
   cfg = parse_cfg(cli_cfg)
   subb = cfg.submit
@@ -115,7 +117,7 @@ def main(cli_cfg: Config):
   with open(config_path, 'w') as f:
     yaml.safe_dump(config_dict, f)
 
-  evals = ['dclm_core', 'ruler']
+  evals = benchmarks 
   for eval in evals:
     jobfile_content = get_jobfile_content(cfg, n_jobs, eval, dd)
     jobfile_path = get_jobfile_path(cfg, eval, dd)
