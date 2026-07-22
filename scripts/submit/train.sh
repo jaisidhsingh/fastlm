@@ -27,9 +27,9 @@ echo $CLUSTER_ID $PROJECT
 
 cd $PROJECT
 
-arch_id=("gdn+attn_1-1" "gdn+attn_1-3")
+arch_id=("gdn" "attn")
 n=("150M" "300M")
-gbs=(64)
+gbs=(128 256)
 lr="all_parallel"
 mode="main"
 bid=100
