@@ -135,7 +135,7 @@ def main(cfg):
   os.makedirs(hf_model_save_folder, exist_ok=True)
   setup_model_and_save(cfg, hf_model_save_folder)
 
-  tokenizer = AutoTokenizer.from_pretrained(cfg.tokenizer_path, model_max_length=2048)
+  tokenizer = AutoTokenizer.from_pretrained(cfg.tokenizer_path, model_max_length=8192)
   tokenizer.save_pretrained(hf_model_save_folder)
   del tokenizer
 

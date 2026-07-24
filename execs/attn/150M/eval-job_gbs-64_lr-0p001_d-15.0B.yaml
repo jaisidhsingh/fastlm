@@ -1,5 +1,5 @@
 arch_id: attn
-bench: dclm_core,ruler
+bench: ruler
 bid: 100
 cluster_id: mpi
 d:
