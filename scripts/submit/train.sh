@@ -28,9 +28,9 @@ echo $CLUSTER_ID $PROJECT
 cd $PROJECT
 
 arch_id=("gdn+attn_1-3")
-n=("300M")
-gbs=(32 64)
-lr="all_parallel"
+n=("150M")
+gbs=(64)
+lr="0.0005,0.008"
 mode="main"
 bid=100
 submit="yes"
