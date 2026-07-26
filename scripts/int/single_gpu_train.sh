@@ -27,11 +27,12 @@ PROJECT=$(find_project)
 echo $CLUSTER_ID $PROJECT
 cd $PROJECT
 
-module load cuda/12.4
+module load cuda/12.9
 nvidia-smi
 nvcc --version
 
-CONFIG=$PROJECT"/src/config/int/hybrid_3-1_300M.yaml"
+CONFIG=$PROJECT"/src/config/int/attn_300M.yaml"
 
 export TORCHDYNAMO_VERBOSE=1
+export TORCH_LOGS="recompiles,graph_breaks"
 python -m experiments.train --config $CONFIG --cluster_id $CLUSTER_ID

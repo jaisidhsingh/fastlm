@@ -175,13 +175,13 @@ class TorchEngine(torch.nn.Module):
 
     # Move model to device
     self.model = model.to(device)
-
+    
     # Compile
     if cfg.torch_compile:
       print('Compiling the model...')
       self.model = apply_compile(self.model)
     
-    # Move to DDP after custom compile
+    # Move to DDP
     if torch.distributed.is_initialized():
       self.model = DDP(self.model, device_ids=[local_rank])
 

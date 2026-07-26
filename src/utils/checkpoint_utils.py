@@ -118,6 +118,8 @@ def maybe_load_checkpoint(cfg, world_size, cluster_id):
       ckpt_path = os.path.join(save_folder, f'ckpt_{cfg.resume_exp_name}.pt')
     print(f'Loading checkpoint from {ckpt_path}')
     ckpt = torch.load(ckpt_path, map_location='cpu', weights_only=False)
+    ckpt_state_dict = {k.replace('_orig_mod.', ''): v for k, v in ckpt['state_dict'].items()}
+    ckpt['state_dict'] = ckpt_state_dict
 
   return ckpt
 

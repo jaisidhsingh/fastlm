@@ -27,7 +27,11 @@ flags.DEFINE_string('cluster_id', None, 'Which cluster are we running things on?
 FLAGS = flags.FLAGS
 
 
+torch._dynamo.config.cache_size_limit = 32
+
+
 def main(argv):
+  print_master(f'RECOMPILE UPPER CAP: {torch._dynamo.config.cache_size_limit}')
   CFG_PATH = FLAGS.config
   cluster_id = FLAGS.cluster_id
   cfg, _ = utils.load_config(CFG_PATH)
