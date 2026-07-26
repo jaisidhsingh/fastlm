@@ -28,10 +28,10 @@ echo $CLUSTER_ID $PROJECT
 cd $PROJECT
 
 arch_id=("gdn")
-n=("300M")
+n=("150M")
 gbs=(128)
-lr="0.00025,0.0005,0.001"
-mode="main"
+lr="all_parallel"
+mode="decay"
 bid=100
 submit="yes"
 routine="train"
