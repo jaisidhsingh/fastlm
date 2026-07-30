@@ -1,4 +1,4 @@
-arch_id: gdn+attn_1-3
+arch_id: gdn+attn_3-1
 attn_gate: true
 attn_qk_norm: true
 beta1: 0.9
@@ -10,7 +10,7 @@ deterministic: false
 dtype: bfloat16
 eval: true
 eval_every_steps: -1
-exp_name: gdn+attn_1-3-50M_gbs-16_cooldown
+exp_name: gdn+attn_3-1-50M_gbs-16_cooldown
 expand: '3.0'
 fused_optim: true
 gdn_conv_size: 4
@@ -19,7 +19,7 @@ gdn_neg_eigval: true
 global_batch_size: 16
 grad_accumulation_steps: 1
 grad_clip: 1.0
-hybrid_mixer_ratio: 1
+hybrid_mixer_ratio: 3
 intra_doc_masking: true
 layer_norm_scaling: false
 log_every_steps: 1
@@ -72,6 +72,6 @@ wandb_dir: /fast/jsingh/projects/fastlm/wandb_logs/june/better
 wandb_entity: msc-thesis-jaisidh
 wandb_mode: offline
 wandb_project: hparam-sweep
-wandb_run_name: gdn+attn_1-3-50M_gbs-16_cooldown
+wandb_run_name: gdn+attn_3-1-50M_gbs-16_cooldown
 warmup_steps: 2000
 weight_decay: 0.1

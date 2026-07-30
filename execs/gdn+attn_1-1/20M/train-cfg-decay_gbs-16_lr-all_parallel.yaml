@@ -40,13 +40,13 @@ model: transformer
 n_heads: 4
 n_layers: 8
 num_evals: 20
-num_workers: 4
+num_workers: 16
 optim: adamw
 param_scale_id: 20M
 print_progress: true
 residual_connection: add
 resume: true
-resume_exp_name: decay_starts_to_1p0B
+resume_exp_name: decay_starts_to_3p0B
 resume_step: null
 rms_norm: true
 sampler: sequential
@@ -61,13 +61,14 @@ steps_budget: -1
 tie_embeddings: true
 token_budget_id:
 - 0.5B
+- 1.0B
 token_mixer: gdn+attn
 torch_compile: true
-trainset_path: /data/horse/ws/jasi149i-fastlm/data/nemotron-cc-sample-mtsynth/tokenized_gpt2/ctx_2048/train
+trainset_path: /fast/jsingh/data/nemotron-cc-sample-mtsynth/tokenized_gpt2/ctx_2048/train
 use_wandb: false
-validset_path: /data/horse/ws/jasi149i-fastlm/data/nemotron-cc-sample-mtsynth/tokenized_gpt2/ctx_2048/valid
+validset_path: /fast/jsingh/data/nemotron-cc-sample-mtsynth/tokenized_gpt2/ctx_2048/valid
 vocab_size: 50304
-wandb_dir: /data/horse/ws/jasi149i-fastlm/wandb_logs
+wandb_dir: /fast/jsingh/projects/fastlm/wandb_logs/june/better
 wandb_entity: msc-thesis-jaisidh
 wandb_mode: offline
 wandb_project: hparam-sweep

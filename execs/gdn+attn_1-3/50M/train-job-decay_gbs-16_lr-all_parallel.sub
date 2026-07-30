@@ -5,7 +5,7 @@ executable=/home/jsingh/projects/fastlm/cluster/single_gpu/condor.sh
 config=/lustre/home/jsingh/projects/fastlm/execs/gdn+attn_1-3/50M/train-cfg-decay_gbs-16_lr-all_parallel.yaml
 
 # Queue as many jobs as points in the hyperaparameter grid
-n_jobs=6
+n_jobs=12
 dp=1
 
 # Pass arguments to the executable

@@ -2,7 +2,7 @@
 executable=/home/jsingh/projects/fastlm/cluster/single_gpu/condor.sh
 
 # Hyperparmeters are specified in a YAML configuration file
-config=/lustre/home/jsingh/projects/fastlm/execs/gdn+attn_1-3/20M/train-cfg-decay_gbs-16_lr-all_parallel.yaml
+config=/lustre/home/jsingh/projects/fastlm/execs/gdn+attn_3-1/20M/train-cfg-decay_gbs-16_lr-all_parallel.yaml
 
 # Queue as many jobs as points in the hyperaparameter grid
 n_jobs=12
