@@ -1,0 +1,10 @@
+arch_id: gdn
+bench: ruler
+bid: 100
+cluster_id: mpi
+d:
+- 7.5B
+- 15.0B
+gbs: 64
+lr: 0.0005
+n: 150M

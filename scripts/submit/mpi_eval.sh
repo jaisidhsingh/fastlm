@@ -29,9 +29,9 @@ cd $PROJECT
 
 arch_id=("attn" "gdn" "gdn+attn_3-1")
 n=("150M")
-d="7.5B,15.0B"
+d="15.0B"
 gbs=64
-lr=0.0005
+lr=0.001
 bid=100
 submit="yes"
 bench="ruler"
