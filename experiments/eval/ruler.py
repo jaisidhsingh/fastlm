@@ -1,12 +1,12 @@
 import json
 import os
-import yaml
 import sys
 from dataclasses import dataclass
 from types import SimpleNamespace
 
 import torch
 import tyro
+import yaml
 from absl import app, flags
 
 from src.constants import *
@@ -102,7 +102,7 @@ def parse_input(cfg):
     assert cfg.job_idx is not None, 'job_idx needed if config is not None.'
     with open(cfg.config, 'r') as f:
       config_dict = yaml.safe_load(f)
-    assert isinstance(config_dict, dict), "What"
+    assert isinstance(config_dict, dict), 'What'
     cfg.arch_id = config_dict['arch_id']
     cfg.n = config_dict['n']
     cfg.d = config_dict['d'][int(cfg.job_idx)]

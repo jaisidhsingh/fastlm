@@ -5,7 +5,6 @@ from dataclasses import dataclass
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
-from scipy.optimize import curve_fit
 
 sns.set_style('whitegrid')
 sns.set_style('whitegrid')
@@ -89,7 +88,7 @@ def get_compute(cfg):
   return compute_n_map[cfg.n] * float(cfg.d[:-1]) * 1e9 * 6
 
 
-def core_plot():
+def one_lr_core_plot():
   arch_ids = ['attn', 'gdn+attn_3-1', 'gdn']
   ns = ['150M']
   ds = ['0.5B', '1.0B', '3.0B', '7.5B', '15.0B']
@@ -122,17 +121,69 @@ def core_plot():
         except FileNotFoundError:
           print('Skipping current setting cause it was not found')
 
-    x_p = np.linspace(1e17, 5e18, 1000)
-    fit = fit_log_curve(xs, ys)
-    y_p = fit['predict'](x_p)
-    plt.plot(x_p, y_p, c=f'C{idx}')
+  #    x_p = np.linspace(1e17, 5e18, 1000)
+  #    fit = fit_log_curve(xs, ys)
+  #    y_p = fit['predict'](x_p)
+  #    plt.plot(x_p, y_p, c=f'C{idx}')
 
   plt.xlabel('Compute')
   plt.ylabel('CORE Metric')
   plt.xscale('log')
   plt.legend()
-  plt.savefig('./core_eval_test.png', dpi=300, bbox_inches='tight')
+  plt.savefig('./results/core_eval.png', dpi=300, bbox_inches='tight')
+
+
+def multi_lr_core_plot():
+  # arch_ids = ['attn', 'gdn+attn_3-1', 'gdn']
+  arch_ids = ['attn']
+  ns = ['150M']
+  # ds = ['7.5B', '15.0B']
+  ds = ['15.0B']
+  gbs = 128
+  lrs = [0.00025, 0.0005, 0.001, 0.002, 0.004, 0.008]
+  markers = ['o', 's', '*', 'P', '^', 'X']
+
+  cfg = Config(gbs=gbs, lr=0.0)
+  for idx, aid in enumerate(arch_ids):
+    cfg.arch_id = aid
+    lbl = lbl_map[aid]
+    entry = True
+    xs, ys = [], []
+
+    for n in ns:
+      cfg.n = n
+
+      for d in ds:
+        cfg.d = d
+
+        mean_core_val = 0.0
+        for jdx, lr in enumerate(lrs):
+          cfg.lr = lr
+          try:
+            core_val = load_data(cfg)['core_metric']
+            mean_core_val += core_val
+            compute = get_compute(cfg)
+            kwargs = dict(c=f'C{idx}', s=100, marker=markers[jdx])
+            entry = False
+            plt.scatter(compute, core_val, **kwargs)
+          except FileNotFoundError:
+            print('Skipping current setting cause it was not found')
+        mean_core_val /= len(lrs)
+        plt.scatter(compute, mean_core_val, c='black', s=50, marker='D')
+
+    for kdx, m in enumerate(markers):
+      plt.scatter([], [], c='black', marker=m, label=lrs[kdx])
+    plt.scatter([], [], c='black', marker='D', label='mean across LRs')
+
+    plt.xlabel('Compute')
+    plt.ylabel('CORE Metric')
+    plt.xscale('log')
+    plt.legend()
+    plt.title(f'{aid.upper()} GBS={gbs}')
+    plt.savefig(f'./results/dclm_core_150M_all_lrs_gbs-{gbs}_{aid}.png', dpi=300, bbox_inches='tight')
+    plt.cla()
+    plt.clf()
 
 
 if __name__ == '__main__':
-  core_plot()
+  multi_lr_core_plot()

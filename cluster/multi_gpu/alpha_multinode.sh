@@ -48,7 +48,7 @@ srun torchrun \
     --node-rank="${SLURM_NODEID}" \
     --master-addr="${MASTER_ADDR}" \
     --master-port="${MASTER_PORT}" \
-    -m experiments.train \
+    -m experiments.train.pretrain \
     --config="${CONFIG}" \
     --job_idx="${SLURM_ARRAY_TASK_ID}" \
     --job_cluster="${SLURM_JOB_ID}" \

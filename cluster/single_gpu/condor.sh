@@ -41,7 +41,7 @@ export TRITON_CACHE_DIR=/fast/jsingh/tmp/triton/${job_cluster}/${job_idx}
 export TORCHINDUCTOR_CACHE_DIR=/fast/jsingh/tmp/inductor/${job_cluster}/${job_idx}
 
 # Execute python script
-python -m experiments.train \
+python -m experiments.train.pretrain \
   --config=$config \
   --job_idx=$job_idx \
   --job_cluster=$job_cluster \

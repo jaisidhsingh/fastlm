@@ -1,0 +1,9 @@
+arch_id: attn
+bench: dclm_core
+bid: 100
+cluster_id: mpi
+d:
+- 15.0B
+gbs: 128
+lr: 0.00025
+n: 150M

@@ -1,9 +1,9 @@
 import os
-import yaml
 from dataclasses import dataclass
 
 import torch
 import tyro
+import yaml
 from huggingface_hub import HfApi
 
 from src.constants import HF_CKPT_DOWN_FOLDER, SCALING_LADDER
@@ -57,6 +57,7 @@ def download_ckpt(cfg: DownloadConfig) -> None:
 
 def validate_hf_stored_ckpt(cfg, path):
   ckpt = torch.load(path, weights_only=True, map_location='cpu')
+  cleaned_ckpt_keys = {k.replace('_orig_mod.', ''): 0 for k in ckpt.keys()}
 
   err_msg = 'Found incorrect architecture in specified checkpoint!'
   d_model = ckpt['embed_tokens.weight'].shape[1]
@@ -67,9 +68,9 @@ def validate_hf_stored_ckpt(cfg, path):
   if '+' not in arch:
     for i in range(4):
       if arch == 'attn':
-        assert f'layers.{i}.token_mixer.w_qkv.weight' in ckpt, err_msg
+        assert f'layers.{i}.token_mixer.w_qkv.weight' in cleaned_ckpt_keys, err_msg
       else:  # gdn
-        assert f'layers.{i}.token_mixer.A_log' in ckpt, err_msg
+        assert f'layers.{i}.token_mixer.A_log' in cleaned_ckpt_keys, err_msg
     return
 
   if ratio > 0:
@@ -81,15 +82,15 @@ def validate_hf_stored_ckpt(cfg, path):
   for i in range(4):
     if ratio > 0:
       if (i + 1) % (ratio + 1) == 0:  # on attn
-        assert f'layers.{i}.token_mixer.w_qkv.weight' in ckpt, err_msg
+        assert f'layers.{i}.token_mixer.w_qkv.weight' in cleaned_ckpt_keys, err_msg
       else:  # on gdn
-        assert f'layers.{i}.token_mixer.A_log' in ckpt, err_msg
+        assert f'layers.{i}.token_mixer.A_log' in cleaned_ckpt_keys, err_msg
 
     else:
       if i % (abs(ratio) + 1) == 0:  # on gdn
-        assert f'layers.{i}.token_mixer.A_log' in ckpt, err_msg
+        assert f'layers.{i}.token_mixer.A_log' in cleaned_ckpt_keys, err_msg
       else:  # on attn
-        assert f'layers.{i}.token_mixer.w_qkv.weight' in ckpt, err_msg
+        assert f'layers.{i}.token_mixer.w_qkv.weight' in cleaned_ckpt_keys, err_msg
 
 
 def parse_input(cfg):
@@ -99,7 +100,7 @@ def parse_input(cfg):
     assert cfg.job_idx is not None, 'job_idx needed if config is not None.'
     with open(cfg.config, 'r') as f:
       config_dict = yaml.safe_load(f)
-    assert isinstance(config_dict, dict), "What"
+    assert isinstance(config_dict, dict), 'What'
     cfg.arch_id = config_dict['arch_id']
     cfg.n = config_dict['n']
     cfg.d = config_dict['d'][int(cfg.job_idx)]

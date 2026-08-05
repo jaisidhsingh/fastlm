@@ -186,6 +186,8 @@ def load_checkpoint_into_hf(hf_model, ckpt_path):
   if 'state_dict' in state:
     state = state['state_dict']
 
+  state = {k.replace('_orig_mod.', ''): v for k, v in state.items()}
+
   missing, unexpected = hf_model.model.load_state_dict(
     state,
     strict=True,

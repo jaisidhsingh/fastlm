@@ -35,4 +35,4 @@ CONFIG=$PROJECT"/src/config/int/attn_300M.yaml"
 
 export TORCHDYNAMO_VERBOSE=1
 export TORCH_LOGS="recompiles,graph_breaks"
-python -m experiments.train --config $CONFIG --cluster_id $CLUSTER_ID
+python -m experiments.train.pretrain --config $CONFIG --cluster_id $CLUSTER_ID

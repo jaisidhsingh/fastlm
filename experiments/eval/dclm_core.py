@@ -15,7 +15,6 @@ from src.constants import *
 from src.models.construct import *
 from src.utils.base_utils import parse_arch_id
 
-
 DEFAULT_MODEL_CONFIG = {
   'arch_id': 'attn',
   'param_scale_id': '20M',
@@ -98,6 +97,7 @@ def setup_model(cfg):
   model_cfg = setup_model_config(cfg)
   model, model_cfg = construct_model(model_cfg)
   ckpt = torch.load(cfg.ckpt_path, weights_only=True, map_location='cpu')
+  ckpt = {k.replace('_orig_mod.', ''): v for k, v in ckpt.items()}
   model.load_state_dict(ckpt)
   model.max_seq_len = model_cfg.seq_len
   return model
@@ -130,8 +130,7 @@ def parse_input(cfg):
     assert cfg.job_idx is not None, 'job_idx needed if config is not None.'
     with open(cfg.config, 'r') as f:
       config_dict = yaml.safe_load(f)
-    assert isinstance(config_dict, dict), "What"
-    cfg.arch_id = config_dict['arch_id']
+    assert isinstance(config_dict, dict), 'What'
     cfg.n = config_dict['n']
     cfg.d = config_dict['d'][int(cfg.job_idx)]
     cfg.gbs = config_dict['gbs']

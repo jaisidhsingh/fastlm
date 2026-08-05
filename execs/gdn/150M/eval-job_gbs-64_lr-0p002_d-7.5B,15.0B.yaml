@@ -1,5 +1,5 @@
 arch_id: gdn
-bench: ruler
+bench: dclm_core
 bid: 100
 cluster_id: mpi
 d:

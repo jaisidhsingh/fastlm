@@ -36,6 +36,6 @@ DP=$1
 
 export TORCHDYNAMO_VERBOSE=1
 
-torchrun --nnodes=1 --standalone --nproc_per_node=$DP -m experiments.train \
+torchrun --nnodes=1 --standalone --nproc_per_node=$DP -m experiments.train.pretrain \
   --config=$CONFIG \
   --cluster_id=$CLUSTER_ID;

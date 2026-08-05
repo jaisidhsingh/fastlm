@@ -36,7 +36,7 @@ export TORCHINDUCTOR_CACHE_DIR=$inductor_cache
 
 # Execute python script
 cd /projects/p_neurasearch/fastlm
-python -m experiments.train \
+python -m experiments.train.pretrain \
   --config=$CONFIG \
   --job_idx=$SLURM_ARRAY_TASK_ID \
   --job_cluster=$SLURM_JOB_ID \
