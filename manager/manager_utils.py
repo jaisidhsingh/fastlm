@@ -240,8 +240,9 @@ queue $(n_jobs)
   """
 
   elif cfg.cluster_id == 'alpha':
+    nodes = 2 if dp > 8 else 1
     return f"""#!/bin/bash
-#SBATCH --nodes=1
+#SBATCH --nodes={nodes}
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task={cpus}
 #SBATCH --mem={mem}G
@@ -272,6 +273,10 @@ fi
 """
 
   elif cfg.cluster_id == 'capella':
+    # clamp to single node training
+    if dp > 4:
+        dp = 4
+    nodes = 2 if dp > 4 else 1
     return f"""#!/bin/bash
 #SBATCH --job-name=fastlm
 #SBATCH --nodes=1
@@ -373,7 +378,7 @@ def submit_and_log(cmdlist, cfg, jobfile_path, lr, n_jobs):
     }
     new_row = pd.DataFrame([info])
 
-    db_path = os.path.join(get_cluster_prefix(cfg.cluster_id), 'execs', 'exec_db.csv')
+    db_path = os.path.join(get_cluster_prefix(cfg.cluster_id), 'fastlm', 'execs', 'exec_db.csv')
     try:
       df = pd.read_csv(db_path)
     except (FileNotFoundError, pd.errors.EmptyDataError):
