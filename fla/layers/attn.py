@@ -92,8 +92,19 @@ class Attention(nn.Module):
     past_key_values: Cache | None = None,
     output_attentions: bool = False,
     use_cache: bool = False,
+    *,
+    permute_rope_qk: bool = False,
     **kwargs,
   ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
+    """Optionally adapt legacy Q/K coordinates to non-interleaved RoPE.
+
+    permute_rope_qk reorders each head after QK normalization, immediately
+    before RoPE. Use it with unpermuted legacy weights only; leave it disabled
+    when translate_gated_attention(..., permute_rope_weights=True) was used.
+    RoPE runs in both cases, and its output Q/K use the same coordinate order.
+    Relative to legacy post-RoPE Q/K, both outputs have even coordinates first,
+    followed by odd coordinates. Keep this setting fixed while reusing a cache.
+    """
     if attention_mask is not None:
       assert len(attention_mask.shape) == 2, (
         'Expected attention_mask as a 0-1 matrix with shape [batch_size, seq_len] '
@@ -125,6 +136,11 @@ class Attention(nn.Module):
 
     if self.max_position_embeddings is not None:
       max_seqlen = max(max_seqlen, self.max_position_embeddings)
+    if permute_rope_qk:
+      if self.head_dim % 2 != 0 or self.rotary.interleaved:
+        raise ValueError('permute_rope_qk requires an even head dimension and non-interleaved RoPE.')
+      q = torch.cat((q[..., ::2], q[..., 1::2]), dim=-1)
+      k = torch.cat((k[..., ::2], k[..., 1::2]), dim=-1)
     q, k = self.rotary(q, k, seqlen_offset=seqlen_offset, max_seqlen=max_seqlen, cu_seqlens=cu_seqlens)
 
     if past_key_values is not None:
