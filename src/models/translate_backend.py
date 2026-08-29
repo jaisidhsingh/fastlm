@@ -7,6 +7,101 @@ if TYPE_CHECKING:
   from torch import Tensor
 
 
+def _translate_weight_only_state_dict(
+  state_dict: Mapping[str, Tensor],
+  *,
+  layer_name: str,
+  expected_ndim: int,
+) -> dict[str, Tensor]:
+  required_keys = {'weight'}
+  missing_keys = required_keys - state_dict.keys()
+  unexpected_keys = state_dict.keys() - required_keys
+  if missing_keys or unexpected_keys:
+    raise ValueError(
+      f'Invalid legacy {layer_name} state dict: missing keys={sorted(missing_keys)}, '
+      f'unexpected keys={sorted(unexpected_keys)}'
+    )
+
+  weight = state_dict['weight']
+  if weight.ndim != expected_ndim:
+    raise ValueError(
+      f'Expected legacy {layer_name} weight to be {expected_ndim}-dimensional, got shape {tuple(weight.shape)}.'
+    )
+  return {'weight': weight}
+
+
+def translate_embeddings(state_dict: Mapping[str, Tensor]) -> dict[str, Tensor]:
+  """Translate one legacy token embedding state dict to FLA embedding keys.
+
+  Pass layer-local keys, without a model prefix. The target must use the same
+  vocabulary and hidden sizes. The input is not modified, and the translated
+  weight retains its dtype, device, and storage.
+  """
+  return _translate_weight_only_state_dict(state_dict, layer_name='embedding', expected_ndim=2)
+
+
+def translate_rms_norm(state_dict: Mapping[str, Tensor]) -> dict[str, Tensor]:
+  """Translate one legacy RMSNorm state dict to FLA RMSNorm keys.
+
+  Pass layer-local keys, without a model/layer prefix. The target must use the
+  same hidden size and epsilon, with elementwise_affine=True and bias=False.
+  The input is not modified, and the translated weight retains its dtype,
+  device, and storage.
+  """
+  return _translate_weight_only_state_dict(state_dict, layer_name='RMSNorm', expected_ndim=1)
+
+
+def translate_lm_head(state_dict: Mapping[str, Tensor]) -> dict[str, Tensor]:
+  """Translate one legacy bias-free LM head state dict to FLA LM head keys.
+
+  Pass layer-local keys, without a model prefix. The target must use the same
+  hidden and vocabulary sizes and bias=False. The input is not modified, and
+  the translated weight retains its dtype, device, and storage.
+  """
+  return _translate_weight_only_state_dict(state_dict, layer_name='LM head', expected_ndim=2)
+
+
+def translate_ffn(state_dict: Mapping[str, Tensor]) -> dict[str, Tensor]:
+  """Translate one legacy GLU state dict to FLA GatedMLP keys.
+
+  Pass layer-local keys, without a model/layer prefix. The target must use the
+  same hidden and intermediate sizes as the legacy layer. The input is not
+  modified, and the translated tensors retain their dtype and device while
+  sharing storage with the input tensors.
+  """
+  required_keys = {'fc1.weight', 'fc2.weight'}
+  missing_keys = required_keys - state_dict.keys()
+  unexpected_keys = state_dict.keys() - required_keys
+  if missing_keys or unexpected_keys:
+    raise ValueError(
+      f'Invalid legacy FFN state dict: missing keys={sorted(missing_keys)}, '
+      f'unexpected keys={sorted(unexpected_keys)}'
+    )
+
+  fc1_weight = state_dict['fc1.weight']
+  fc2_weight = state_dict['fc2.weight']
+  if fc1_weight.ndim != 2:
+    raise ValueError(f'Expected fc1.weight to be two-dimensional, got shape {tuple(fc1_weight.shape)}.')
+  if fc2_weight.ndim != 2:
+    raise ValueError(f'Expected fc2.weight to be two-dimensional, got shape {tuple(fc2_weight.shape)}.')
+
+  hidden_size, intermediate_size = fc2_weight.shape
+  expected_fc1_shape = (2 * intermediate_size, hidden_size)
+  if fc1_weight.shape != expected_fc1_shape:
+    raise ValueError(
+      'Legacy and FLA FFNs are equivalent only for a gated legacy GLU: '
+      f'expected fc1.weight with shape {expected_fc1_shape} based on fc2.weight, '
+      f'got {tuple(fc1_weight.shape)}.'
+    )
+
+  gate_weight, up_weight = fc1_weight.split(intermediate_size, dim=0)
+  return {
+    'gate_proj.weight': gate_weight,
+    'up_proj.weight': up_weight,
+    'down_proj.weight': fc2_weight,
+  }
+
+
 def translate_gated_attention(
   state_dict: Mapping[str, Tensor],
   *,
