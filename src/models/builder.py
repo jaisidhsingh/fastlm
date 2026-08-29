@@ -42,7 +42,10 @@ def build_hybrid_layers(n_layers, ratio):
 
 
 def build_kwargs(cfg: SimpleNamespace, arch: str):
-  return {}
+  kwargs = {}
+  if "gdn" in arch:
+    kwargs["expand_v"] = vars(cfg).get("expand_v", 2)
+  return kwargs
 
 
 def get_hybrid_model_config(cfg: SimpleNamespace, arch: str, ratio: int):
@@ -51,9 +54,7 @@ def get_hybrid_model_config(cfg: SimpleNamespace, arch: str, ratio: int):
     hidden_size=cfg.d_model,
     num_heads=cfg.n_heads,
     num_hidden_layers=cfg.n_layers,
-    intermediate_size=cfg.d_ffn,
-    expand_v=cfg.expand_v,
-    head_dim=cfg.head_dim,
+    intermediate_size=int(cfg.d_model * float(Fraction(cfg.expand))),
     max_position_embeddings=cfg.seq_len,
     vocab_size=cfg.vocab_size,
     **kwargs,
@@ -84,9 +85,7 @@ def get_pure_model_config(cfg: SimpleNamespace, arch: str):
     hidden_size=cfg.d_model,
     num_heads=cfg.n_heads,
     num_hidden_layers=cfg.n_layers,
-    intermediate_size=cfg.d_ffn,
-    expand_v=cfg.expand_v,
-    head_dim=cfg.head_dim,
+    intermediate_size=int(cfg.d_model * float(Fraction(cfg.expand))),
     max_position_embeddings=cfg.seq_len,
     vocab_size=cfg.vocab_size,
     **kwargs,

@@ -7,9 +7,9 @@ import torch.nn.functional as F
 from torch import nn
 
 from fla.layers import GatedDeltaNet
-from src.models.attention import GatedAttention
-from src.models.components import GLU, MLP, MLPReluSquared, RMSNorm
-from src.models.embeddings import apply_rotary_emb_complex_like, precompute_freqs_cis
+from src.models.legacy.attention import GatedAttention
+from src.models.legacy.components import GLU, MLP, MLPReluSquared, RMSNorm
+from src.models.legacy.embeddings import apply_rotary_emb_complex_like, precompute_freqs_cis
 
 
 @dataclass

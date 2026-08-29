@@ -7,8 +7,8 @@ import torch.nn.functional as F
 from torch import nn
 from torch.nn.attention import SDPBackend, sdpa_kernel
 
-from src.models.components import RMSNorm
-from src.models.embeddings import apply_rotary_emb_complex_like
+from src.models.legacy.components import RMSNorm
+from src.models.legacy.embeddings import apply_rotary_emb_complex_like
 
 try:
   from torch.nn.attention.flex_attention import BlockMask, flex_attention

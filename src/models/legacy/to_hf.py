@@ -7,7 +7,7 @@ from transformers.modeling_outputs import (
 )
 
 from src.data.data_prep_utils import cu_seqlens_from_dense_attention_mask
-from src.models.transformer import ModelConfig, Transformer
+from src.models.legacy.transformer import ModelConfig, Transformer
 
 
 class HFModelConfig(PretrainedConfig):

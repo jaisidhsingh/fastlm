@@ -4,8 +4,9 @@ import torch
 import wandb
 from transformers import AutoConfig, AutoModelForCausalLM
 
-from src.models.to_hf import HFModelConfig, HFModelForCausalLM
-from src.models.transformer import ModelConfig, Transformer
+from src.models.legacy.to_hf import HFModelConfig, HFModelForCausalLM
+from src.models.legacy.transformer import ModelConfig, Transformer
+
 
 # registration
 AutoConfig.register(

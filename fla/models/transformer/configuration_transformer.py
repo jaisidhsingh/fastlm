@@ -55,6 +55,7 @@ class TransformerConfig(PretrainedConfig):
     self.window_size = window_size
     self.rope_theta = rope_theta
     self.max_position_embeddings = max_position_embeddings
+    self.use_gate = use_gate
 
     self.hidden_ratio = hidden_ratio
     self.intermediate_size = intermediate_size
