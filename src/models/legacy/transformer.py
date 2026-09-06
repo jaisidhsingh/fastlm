@@ -6,7 +6,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-from fla.layers import GatedDeltaNet
+from fla.layers.legacy_gated_deltanet import LegacyGatedDeltaNet as GatedDeltaNet
 from src.models.legacy.attention import GatedAttention
 from src.models.legacy.components import GLU, MLP, MLPReluSquared, RMSNorm
 from src.models.legacy.embeddings import apply_rotary_emb_complex_like, precompute_freqs_cis

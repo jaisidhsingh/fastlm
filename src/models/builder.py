@@ -1,19 +1,21 @@
 from fractions import Fraction
 from types import SimpleNamespace
+
 from fla.models import GatedDeltaNetConfig, TransformerConfig
 from src.models.legacy.transformer import ModelConfig
 
-
-CONFIG_MAP = {
-  "attn": TransformerConfig,
-  "gdn": GatedDeltaNetConfig
-}
+CONFIG_MAP = {'attn': TransformerConfig, 'gdn': GatedDeltaNetConfig}
 
 
 def parse_arch_id(arch_id: str):
   """
   - pure attention corresponds to `arch_id = "attn"`
-  - hybrid with gdn:attn = x:1 corresponds to `arch_id: "gdn+attn_x"`
+  - hybrid with gdn:attn = x:1 (one attn layer after x gdn layers)
+    corresponds to `arch_id: "gdn+attn_x-1"`
+    x is stored as `ratio = x`
+  - hybrid with attn:gdn = x:1 (one gdn layer after x attn layers)
+    correspoinds to `arch_id: gdn+attn_1-x`
+    x is stored as `ratio = -x` (negative indicates reverse layer order)
   """
   split_id = arch_id.split('_')
   arch = split_id[0]
@@ -30,12 +32,12 @@ def parse_arch_id(arch_id: str):
 def build_hybrid_layers(n_layers, ratio):
   layers = []
   for i in range(n_layers):
-    if ratio > 0: # means repeat [(r x gdn), attn]
-      if (i+1) % (ratio+1) == 0:
+    if ratio > 0:  # means repeat [(r gdn layers), attn]
+      if (i + 1) % (ratio + 1) == 0:
         layers.append(i)
-    else: # means repeat [(r x attn), gdn]
+    else:  # means repeat [(r attn layers), gdn]
       r = abs(ratio)
-      if (i+1) % (r+1) != 0:
+      if (i + 1) % (r + 1) != 0:
         layers.append(i)
 
   return layers
@@ -43,8 +45,8 @@ def build_hybrid_layers(n_layers, ratio):
 
 def build_kwargs(cfg: SimpleNamespace, arch: str):
   kwargs = {}
-  if "gdn" in arch:
-    kwargs["expand_v"] = vars(cfg).get("expand_v", 2)
+  if 'gdn' in arch:
+    kwargs['expand_v'] = vars(cfg).get('expand_v', 2)
   return kwargs
 
 
@@ -69,7 +71,7 @@ def get_hybrid_model_config(cfg: SimpleNamespace, arch: str, ratio: int):
     use_gate=cfg.attn_gate,
   )
   config.attn = attn_config_to_insert
-  return config 
+  return config
 
 
 def get_pure_model_config(cfg: SimpleNamespace, arch: str):
@@ -78,7 +80,7 @@ def get_pure_model_config(cfg: SimpleNamespace, arch: str):
   elif arch == 'gdn':
     ref = GatedDeltaNetConfig
   else:
-    raise NotImplementedError("Unsupported value of `arch` provided")
+    raise NotImplementedError('Unsupported value of `arch` provided')
 
   kwargs = build_kwargs(cfg, arch)
   return ref(
@@ -105,7 +107,7 @@ def config_builder(cfg):
 
 def _construct_custom_config_for_legacy_backend(cfg):
   """
-  only here as a reference for the above code
+  Just as a reference for the code above.
   """
   model_cfg = ModelConfig(
     model_dtype=cfg.dtype,
@@ -131,4 +133,3 @@ def _construct_custom_config_for_legacy_backend(cfg):
     use_flex_attention=getattr(cfg, 'use_flex_attention', True),
   )
   return model_cfg
-
