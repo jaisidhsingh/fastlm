@@ -9,7 +9,8 @@ import torch
 from torch import nn
 
 from fla.layers.attn import Attention
-from fla.modules import GatedMLP, RMSNorm as FLARMSNorm
+from fla.modules import GatedMLP
+from fla.modules import RMSNorm as FLARMSNorm
 from src.models import builder
 from src.models.legacy.attention import GatedAttention
 from src.models.legacy.components import GLU, RMSNorm
@@ -21,7 +22,6 @@ from src.models.translate_backend import (
   translate_lm_head,
   translate_rms_norm,
 )
-
 
 ModuleFactory = Callable[[SimpleNamespace, Any], nn.Module]
 
@@ -186,6 +186,33 @@ def _forward(
   return module(inputs, freqs_cis=freqs_cis)[0]
 
 
+def _make_legacy_config() -> SimpleNamespace:
+  return _normalize_config(
+    dict(
+      arch_id='attn',
+      vocab_size=256,
+      dim=64,
+      n_heads=4,
+      n_layers=1,
+      seq_len=16,
+      expand=4,
+      mlp='glu',
+      rmsnorm_eps=1e-6,
+      model_dtype='float32',
+      attn_gate=False,
+      attn_qk_norm=False,
+    )
+  )
+
+
+def _clone_state_dict(state_dict: dict) -> dict:
+  return {key: tensor.detach().clone() for key, tensor in state_dict.items()}
+
+
+def _gradients(module: nn.Module) -> dict:
+  return {name: parameter.grad for name, parameter in module.named_parameters() if parameter.grad is not None}
+
+
 def test_translated_module_fwd_pass(
   module_spec: str,
   legacy_state_dict: dict,
@@ -194,29 +221,111 @@ def test_translated_module_fwd_pass(
   if module_spec not in LEGACY_MODULE_SPEC_MAP:
     raise ValueError(f'Unknown module_spec {module_spec!r}; expected one of {sorted(LEGACY_MODULE_SPEC_MAP)}.')
 
+  reference_tensor = next(iter(legacy_state_dict.values()))
   config = _normalize_config(legacy_config)
   fla_config = builder.config_builder(config)
+
   legacy_module = LEGACY_MODULE_SPEC_MAP[module_spec](config, fla_config)
   fla_module = FLA_MODULE_SPEC_MAP[module_spec](config, fla_config)
 
-  reference_tensor = next(iter(legacy_state_dict.values()))
   legacy_module.to(device=reference_tensor.device, dtype=reference_tensor.dtype)
-  fla_module.to(device=reference_tensor.device, dtype=reference_tensor.dtype)
   legacy_module.load_state_dict(legacy_state_dict, strict=True)
+  legacy_module.eval()
 
+  fla_module.to(device=reference_tensor.device, dtype=reference_tensor.dtype)
   translate_module = TRANSLATE_MODULE_SPEC_MAP[module_spec]
   translated_state_dict = translate_module(legacy_state_dict)
   fla_module.load_state_dict(translated_state_dict, strict=True)
-
-  legacy_module.eval()
   fla_module.eval()
+
   torch.manual_seed(0)
   inputs = _make_inputs(module_spec, config, legacy_module)
+
   with torch.no_grad():
     legacy_outputs = _forward(module_spec, legacy_module, inputs, config, fla_backend=False)
     fla_outputs = _forward(module_spec, fla_module, inputs, config, fla_backend=True)
 
   difference = fla_outputs.float() - legacy_outputs.float()
+
   print(f'allclose: {torch.allclose(fla_outputs, legacy_outputs)}')
   print(f'frobenius norm: {torch.linalg.vector_norm(difference)}')
   print(f'max absolute error: {difference.abs().max()}')
+
+
+def test_translated_module_bwd_pass(
+  module_spec: str,
+  legacy_state_dict: dict,
+  legacy_config: dict | SimpleNamespace,
+) -> None:
+  if module_spec not in LEGACY_MODULE_SPEC_MAP:
+    raise ValueError(f'Unknown module_spec {module_spec!r}; expected one of {sorted(LEGACY_MODULE_SPEC_MAP)}.')
+
+  reference_tensor = next(iter(legacy_state_dict.values()))
+  config = _normalize_config(legacy_config)
+  fla_config = builder.config_builder(config)
+
+  legacy_module = LEGACY_MODULE_SPEC_MAP[module_spec](config, fla_config)
+  fla_module = FLA_MODULE_SPEC_MAP[module_spec](config, fla_config)
+
+  legacy_module.to(device=reference_tensor.device, dtype=reference_tensor.dtype)
+  legacy_module.load_state_dict(_clone_state_dict(legacy_state_dict), strict=True)
+  legacy_module.eval()
+  legacy_module.zero_grad(set_to_none=True)
+
+  fla_module.to(device=reference_tensor.device, dtype=reference_tensor.dtype)
+  translate_module = TRANSLATE_MODULE_SPEC_MAP[module_spec]
+  translated_state_dict = translate_module(_clone_state_dict(legacy_state_dict))
+  fla_module.load_state_dict(_clone_state_dict(translated_state_dict), strict=True)
+  fla_module.eval()
+  fla_module.zero_grad(set_to_none=True)
+
+  torch.manual_seed(0)
+  inputs = _make_inputs(module_spec, config, legacy_module)
+
+  legacy_outputs = _forward(module_spec, legacy_module, inputs, config, fla_backend=False)
+  legacy_outputs.float().sum().backward()
+
+  fla_outputs = _forward(module_spec, fla_module, inputs, config, fla_backend=True)
+  fla_outputs.float().sum().backward()
+
+  legacy_gradients = translate_module(_gradients(legacy_module))
+  fla_gradients = _gradients(fla_module)
+
+  for name in sorted(legacy_gradients):
+    if name not in fla_gradients:
+      print(f'{name}: missing FLA gradient')
+      continue
+
+    legacy_gradient = legacy_gradients[name]
+    fla_gradient = fla_gradients[name]
+    difference = fla_gradient.float() - legacy_gradient.float()
+
+    print(f'{name}:')
+    print(f'  equal: {torch.equal(fla_gradient, legacy_gradient)}')
+    print(f'  allclose: {torch.allclose(fla_gradient, legacy_gradient)}')
+    print(f'  frobenius norm: {torch.linalg.vector_norm(difference)}')
+
+  for name in sorted(fla_gradients.keys() - legacy_gradients.keys()):
+    print(f'{name}: no legacy counterpart')
+
+
+def main() -> None:
+  config = _make_legacy_config()
+  fla_config = builder.config_builder(config)
+  device = 'cuda' if torch.cuda.is_available() else 'cpu'
+  dtype = torch.float32
+
+  for module_spec, factory in LEGACY_MODULE_SPEC_MAP.items():
+    torch.manual_seed(0)
+    legacy_module = factory(config, fla_config).to(device=device, dtype=dtype)
+    legacy_state_dict = legacy_module.state_dict()
+
+    print(f'--- {module_spec} forward ---')
+    test_translated_module_fwd_pass(module_spec, legacy_state_dict, config)
+
+    print(f'--- {module_spec} backward ---')
+    test_translated_module_bwd_pass(module_spec, legacy_state_dict, config)
+
+
+if __name__ == '__main__':
+  main()
