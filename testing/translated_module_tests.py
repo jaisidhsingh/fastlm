@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from collections.abc import Callable
 from fractions import Fraction
 from types import SimpleNamespace
@@ -213,6 +214,50 @@ def _gradients(module: nn.Module) -> dict:
   return {name: parameter.grad for name, parameter in module.named_parameters() if parameter.grad is not None}
 
 
+def _init_weights(module: nn.Module) -> None:
+  if isinstance(module, nn.Linear):
+    torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
+    if module.bias is not None:
+      torch.nn.init.zeros_(module.bias)
+  elif isinstance(module, nn.Embedding):
+    torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
+
+
+RESIDUAL_BRANCH_SUFFIXES = (
+  'fc2.weight',
+  'w_out.weight',
+  'o_proj.weight',
+  'down_proj.weight',
+)
+
+
+def _scale_residual_branches(module: nn.Module, n_layers: int) -> None:
+  """Scale the residual output projections of either backend.
+
+  `Transformer._scale_residual_branches` lists the legacy names only. FLA names
+  its attention output `o_proj.weight`, which the legacy list already covers for
+  the legacy GDN, but names its FFN output `down_proj.weight`, which the legacy
+  list does not cover. That name is included here so the same scaling reaches
+  both backends.
+  """
+  for name, parameter in module.named_parameters():
+    if name.endswith(RESIDUAL_BRANCH_SUFFIXES):
+      torch.nn.init.normal_(parameter, mean=0.0, std=0.02 / math.sqrt(2 * n_layers))
+
+
+def _initialize(module: nn.Module, n_layers: int) -> None:
+  """Initialize a module as `Transformer.__init__` initializes its submodules.
+
+  `normal_` fills a tensor element by element, so drawing one fused legacy
+  weight and drawing the separate FLA weights it splits into consume the same
+  random numbers in the same order. Legacy and FLA also register those weights
+  in the same order, so applying this to both backends under one seed gives
+  them equal weights.
+  """
+  module.apply(_init_weights)
+  _scale_residual_branches(module, n_layers)
+
+
 def test_translated_module_fwd_pass(
   module_spec: str,
   legacy_state_dict: dict,
@@ -239,6 +284,91 @@ def test_translated_module_fwd_pass(
   fla_module.eval()
 
   torch.manual_seed(0)
+  inputs = _make_inputs(module_spec, config, legacy_module)
+
+  with torch.no_grad():
+    legacy_outputs = _forward(module_spec, legacy_module, inputs, config, fla_backend=False)
+    fla_outputs = _forward(module_spec, fla_module, inputs, config, fla_backend=True)
+
+  difference = fla_outputs.float() - legacy_outputs.float()
+
+  print(f'allclose: {torch.allclose(fla_outputs, legacy_outputs)}')
+  print(f'frobenius norm: {torch.linalg.vector_norm(difference)}')
+  print(f'max absolute error: {difference.abs().max()}')
+
+
+def test_initialization_fwd_pass(
+  module_spec: str,
+  legacy_config: dict | SimpleNamespace,
+  seed: int = 0,
+) -> None:
+  """Initialize the legacy module and translate that initialization into FLA."""
+  if module_spec not in LEGACY_MODULE_SPEC_MAP:
+    raise ValueError(f'Unknown module_spec {module_spec!r}; expected one of {sorted(LEGACY_MODULE_SPEC_MAP)}.')
+
+  config = _normalize_config(legacy_config)
+  fla_config = builder.config_builder(config)
+  device = 'cuda' if torch.cuda.is_available() else 'cpu'
+  dtype = getattr(torch, config.model_dtype)
+
+  torch.manual_seed(seed)
+  legacy_module = LEGACY_MODULE_SPEC_MAP[module_spec](config, fla_config).to(device=device, dtype=dtype)
+  _initialize(legacy_module, config.n_layers)
+  legacy_module.eval()
+
+  fla_module = FLA_MODULE_SPEC_MAP[module_spec](config, fla_config).to(device=device, dtype=dtype)
+  translate_module = TRANSLATE_MODULE_SPEC_MAP[module_spec]
+  fla_module.load_state_dict(translate_module(legacy_module.state_dict()), strict=True)
+  fla_module.eval()
+
+  torch.manual_seed(seed)
+  inputs = _make_inputs(module_spec, config, legacy_module)
+
+  with torch.no_grad():
+    legacy_outputs = _forward(module_spec, legacy_module, inputs, config, fla_backend=False)
+    fla_outputs = _forward(module_spec, fla_module, inputs, config, fla_backend=True)
+
+  difference = fla_outputs.float() - legacy_outputs.float()
+
+  print(f'allclose: {torch.allclose(fla_outputs, legacy_outputs)}')
+  print(f'frobenius norm: {torch.linalg.vector_norm(difference)}')
+  print(f'max absolute error: {difference.abs().max()}')
+
+
+def test_seeded_initialization_fwd_pass(
+  module_spec: str,
+  legacy_config: dict | SimpleNamespace,
+  seed: int = 0,
+) -> None:
+  """Initialize both backends independently under one seed, without translation."""
+  if module_spec not in LEGACY_MODULE_SPEC_MAP:
+    raise ValueError(f'Unknown module_spec {module_spec!r}; expected one of {sorted(LEGACY_MODULE_SPEC_MAP)}.')
+
+  config = _normalize_config(legacy_config)
+  fla_config = builder.config_builder(config)
+  device = 'cuda' if torch.cuda.is_available() else 'cpu'
+  dtype = getattr(torch, config.model_dtype)
+
+  torch.manual_seed(seed)
+  legacy_module = LEGACY_MODULE_SPEC_MAP[module_spec](config, fla_config).to(device=device, dtype=dtype)
+  _initialize(legacy_module, config.n_layers)
+  legacy_module.eval()
+
+  torch.manual_seed(seed)
+  fla_module = FLA_MODULE_SPEC_MAP[module_spec](config, fla_config).to(device=device, dtype=dtype)
+  _initialize(fla_module, config.n_layers)
+  fla_module.eval()
+
+  translate_module = TRANSLATE_MODULE_SPEC_MAP[module_spec]
+  expected_state_dict = translate_module(legacy_module.state_dict())
+  fla_state_dict = fla_module.state_dict()
+
+  for name in sorted(expected_state_dict):
+    expected = expected_state_dict[name].float()
+    actual = fla_state_dict[name].float()
+    print(f'{name}: max absolute error {(actual - expected).abs().max()}')
+
+  torch.manual_seed(seed)
   inputs = _make_inputs(module_spec, config, legacy_module)
 
   with torch.no_grad():
@@ -325,6 +455,12 @@ def main() -> None:
 
     print(f'--- {module_spec} backward ---')
     test_translated_module_bwd_pass(module_spec, legacy_state_dict, config)
+
+    print(f'--- {module_spec} initialization forward (translated) ---')
+    test_initialization_fwd_pass(module_spec, config)
+
+    print(f'--- {module_spec} initialization forward (seeded) ---')
+    test_seeded_initialization_fwd_pass(module_spec, config)
 
 
 if __name__ == '__main__':
