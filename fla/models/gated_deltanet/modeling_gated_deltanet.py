@@ -53,6 +53,8 @@ class GatedDeltaNetBlock(GradientCheckpointingLayer):
         num_heads=config.attn['num_heads'],
         num_kv_heads=config.attn['num_kv_heads'],
         qkv_bias=config.attn['qkv_bias'],
+        qk_norm=config.attn['qk_norm'],
+        use_gate=config.attn['use_gate'],
         window_size=config.attn['window_size'],
         rope_theta=config.attn['rope_theta'],
         max_position_embeddings=config.max_position_embeddings,
@@ -70,7 +72,8 @@ class GatedDeltaNetBlock(GradientCheckpointingLayer):
         use_short_conv=config.use_short_conv,
         allow_neg_eigval=config.allow_neg_eigval,
         conv_size=config.conv_size,
-        norm_eps=config.norm_eps,
+        norm_eps=config.gdn_norm_eps,
+        intra_doc=config.intra_doc,
         layer_idx=layer_idx,
       )
     self.mlp_norm = (RMSNorm if config.fuse_norm else nn.RMSNorm)(config.hidden_size, eps=config.norm_eps)
@@ -353,7 +356,7 @@ class GatedDeltaNetModel(GatedDeltaNetPreTrainedModel):
 
 
 class GatedDeltaNetForCausalLM(GatedDeltaNetPreTrainedModel, FLAGenerationMixin):
-  _tied_weights_keys = ['lm_head.weight']
+  _tied_weights_keys = {'lm_head.weight': 'model.embeddings.weight'}
 
   def __init__(self, config):
     super().__init__(config)

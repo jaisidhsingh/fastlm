@@ -344,7 +344,7 @@ class TransformerModel(TransformerPreTrainedModel):
 
 
 class TransformerForCausalLM(TransformerPreTrainedModel, FLAGenerationMixin):
-  _tied_weights_keys = ['lm_head.weight']
+  _tied_weights_keys = {'lm_head.weight': 'model.embeddings.weight'}
 
   def __init__(self, config):
     super().__init__(config)

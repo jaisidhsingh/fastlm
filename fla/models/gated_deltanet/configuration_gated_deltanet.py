@@ -32,6 +32,8 @@ class GatedDeltaNetConfig(PretrainedConfig):
         hidden_act: str = "swish",
         num_hidden_layers: int = 21,
         norm_eps: float = 1e-6,
+        gdn_norm_eps: float = 1e-5,
+        intra_doc: bool = False,
         attn: dict | None = None,
         use_cache: bool = True,
         pad_token_id: int | None = None,
@@ -64,6 +66,8 @@ class GatedDeltaNetConfig(PretrainedConfig):
         self.hidden_act = hidden_act
         self.num_hidden_layers = num_hidden_layers
         self.norm_eps = norm_eps
+        self.gdn_norm_eps = gdn_norm_eps
+        self.intra_doc = intra_doc
         self.attn = attn
         self.use_cache = use_cache
         self.initializer_range = initializer_range
@@ -97,6 +101,8 @@ class GatedDeltaNetConfig(PretrainedConfig):
                 raise ValueError("Number of heads must be provided to initialize hybrid attention layers")
             attn['num_kv_heads'] = attn.get('num_kv_heads', attn['num_heads'])
             attn['qkv_bias'] = attn.get('qkv_bias', False)
+            attn['qk_norm'] = attn.get('qk_norm', False)
+            attn['use_gate'] = attn.get('use_gate', False)
             attn['window_size'] = attn.get('window_size', None)
             attn['rope_theta'] = attn.get('rope_theta', 10000.)
 

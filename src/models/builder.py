@@ -5,6 +5,8 @@ from fla.models import GatedDeltaNetConfig, TransformerConfig
 from src.models.legacy.transformer import ModelConfig
 
 CONFIG_MAP = {'attn': TransformerConfig, 'gdn': GatedDeltaNetConfig}
+# `Transformer` builds its rotary embeddings with `precompute_freqs_cis(head_dim, seq_len, 500000)`.
+ROPE_THETA = 500000
 
 
 def parse_arch_id(arch_id: str):
@@ -35,43 +37,68 @@ def build_hybrid_layers(n_layers, ratio):
     if ratio > 0:  # means repeat [(r gdn layers), attn]
       if (i + 1) % (ratio + 1) == 0:
         layers.append(i)
-    else:  # means repeat [(r attn layers), gdn]
+    else:  # means repeat [gdn, (r attn layers)]
       r = abs(ratio)
-      if (i + 1) % (r + 1) != 0:
+      if i % (r + 1) != 0:
         layers.append(i)
 
   return layers
 
 
 def build_kwargs(cfg: SimpleNamespace, arch: str):
-  kwargs = {}
+  """Map the legacy config fields onto the FLA config fields for one architecture.
+
+  `arch` comes from `parse_arch_id`, so a hybrid gives `"gdn+attn"` and takes the
+  `gdn` branch; its attention settings travel in the `attn` dict instead. Only a
+  pure `"attn"` architecture puts attention settings at the top level.
+  """
+  values = vars(cfg)
+  kwargs = {
+    'norm_eps': values.get('rmsnorm_eps', 1e-6),
+    'tie_word_embeddings': values.get('tie_embeddings', False),
+  }
   if 'gdn' in arch:
-    kwargs['expand_v'] = vars(cfg).get('expand_v', 2)
+    kwargs['expand_v'] = values.get('expand_v', 2)
+    kwargs['head_dim'] = cfg.d_model // cfg.n_heads
+    kwargs['conv_size'] = cfg.gdn_conv_size
+    kwargs['use_gate'] = cfg.gdn_gate
+    kwargs['allow_neg_eigval'] = cfg.gdn_neg_eigval
+    kwargs['intra_doc'] = values.get('intra_doc_masking', False)
+  elif arch == 'attn':
+    kwargs['num_kv_heads'] = cfg.n_heads
+    kwargs['qkv_bias'] = False
+    kwargs['qk_norm'] = cfg.attn_qk_norm
+    kwargs['use_gate'] = cfg.attn_gate
+    kwargs['window_size'] = None
+    kwargs['rope_theta'] = ROPE_THETA
   return kwargs
 
 
 def get_hybrid_model_config(cfg: SimpleNamespace, arch: str, ratio: int):
   kwargs = build_kwargs(cfg, arch)
-  config = GatedDeltaNetConfig(
+  attn_config_to_insert = dict(
+    layers=build_hybrid_layers(cfg.n_layers, ratio),
+    hidden_size=cfg.d_model,
+    num_heads=cfg.n_heads,
+    num_kv_heads=cfg.n_heads,
+    qkv_bias=False,
+    qk_norm=cfg.attn_qk_norm,
+    use_gate=cfg.attn_gate,
+    window_size=None,
+    rope_theta=ROPE_THETA,
+  )
+  # `attn` must be passed to the constructor, not assigned afterwards: the validation
+  # that fills in the keys `GatedDeltaNetBlock` reads runs only inside `__init__`.
+  return GatedDeltaNetConfig(
     hidden_size=cfg.d_model,
     num_heads=cfg.n_heads,
     num_hidden_layers=cfg.n_layers,
     intermediate_size=int(cfg.d_model * float(Fraction(cfg.expand))),
     max_position_embeddings=cfg.seq_len,
     vocab_size=cfg.vocab_size,
+    attn=attn_config_to_insert,
     **kwargs,
   )
-
-  attn_config_to_insert = dict(
-    layers=build_hybrid_layers(cfg.n_layers, ratio),
-    hidden_size=cfg.d_model,
-    num_heads=cfg.n_heads,
-    num_kv_heads=cfg.n_heads,
-    qk_norm=cfg.attn_qk_norm,
-    use_gate=cfg.attn_gate,
-  )
-  config.attn = attn_config_to_insert
-  return config
 
 
 def get_pure_model_config(cfg: SimpleNamespace, arch: str):
