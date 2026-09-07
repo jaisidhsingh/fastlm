@@ -23,6 +23,7 @@ hybrid LLM architectures (interleaving Gated DeltaNet layers with dense (full so
 
 
 ## Don't
+- Don't run commands that execute scripts in the repo without permission
 - Don't add comments that restate the code
 - Don't use comments to put separators/headers between classes/functions
 - Don't change or clean-up any code/file that is not relevant to the explicit task or change requested by the user

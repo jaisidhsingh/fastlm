@@ -26,6 +26,8 @@ from src.models.translate_backend import (
 
 ModuleFactory = Callable[[SimpleNamespace, Any], nn.Module]
 
+DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
 
 def _legacy_gated_attention(config: SimpleNamespace, fla_config: Any) -> nn.Module:
   return GatedAttention(config)
@@ -157,13 +159,13 @@ def _make_inputs(module_spec: str, config: SimpleNamespace, module: nn.Module) -
       low=0,
       high=config.vocab_size,
       size=(batch_size, sequence_length),
-      device=parameter.device,
+      device=DEVICE,
     )
   return torch.randn(
     batch_size,
     sequence_length,
     config.dim,
-    device=parameter.device,
+    device=DEVICE,
     dtype=parameter.dtype,
   )
 
@@ -183,7 +185,7 @@ def _forward(
     return module(inputs, permute_rope_qk=True)[0]
 
   head_dim = config.dim // config.n_heads
-  freqs_cis = precompute_freqs_cis(head_dim, inputs.shape[1], theta=500000).to(inputs.device)
+  freqs_cis = precompute_freqs_cis(head_dim, inputs.shape[1], theta=500000).to(DEVICE)
   return module(inputs, freqs_cis=freqs_cis)[0]
 
 
@@ -207,7 +209,11 @@ def _make_legacy_config() -> SimpleNamespace:
 
 
 def _clone_state_dict(state_dict: dict) -> dict:
-  return {key: tensor.detach().clone() for key, tensor in state_dict.items()}
+  return {key: tensor.detach().clone().to(DEVICE) for key, tensor in state_dict.items()}
+
+
+def _to_device(state_dict: dict) -> dict:
+  return {key: tensor.to(DEVICE) for key, tensor in state_dict.items()}
 
 
 def _gradients(module: nn.Module) -> dict:
@@ -273,15 +279,18 @@ def test_translated_module_fwd_pass(
   legacy_module = LEGACY_MODULE_SPEC_MAP[module_spec](config, fla_config)
   fla_module = FLA_MODULE_SPEC_MAP[module_spec](config, fla_config)
 
-  legacy_module.to(device=reference_tensor.device, dtype=reference_tensor.dtype)
-  legacy_module.load_state_dict(legacy_state_dict, strict=True)
+  legacy_module.to(device=DEVICE, dtype=reference_tensor.dtype)
+  legacy_module.load_state_dict(_to_device(legacy_state_dict), strict=True)
   legacy_module.eval()
 
-  fla_module.to(device=reference_tensor.device, dtype=reference_tensor.dtype)
+  fla_module.to(device=DEVICE, dtype=reference_tensor.dtype)
   translate_module = TRANSLATE_MODULE_SPEC_MAP[module_spec]
-  translated_state_dict = translate_module(legacy_state_dict)
+  translated_state_dict = translate_module(_to_device(legacy_state_dict))
   fla_module.load_state_dict(translated_state_dict, strict=True)
   fla_module.eval()
+
+  legacy_module.to(dtype=torch.bfloat16, device=DEVICE)
+  fla_module.to(dtype=torch.bfloat16, device=DEVICE)
 
   torch.manual_seed(0)
   inputs = _make_inputs(module_spec, config, legacy_module)
@@ -308,18 +317,20 @@ def test_initialization_fwd_pass(
 
   config = _normalize_config(legacy_config)
   fla_config = builder.config_builder(config)
-  device = 'cuda' if torch.cuda.is_available() else 'cpu'
   dtype = getattr(torch, config.model_dtype)
 
   torch.manual_seed(seed)
-  legacy_module = LEGACY_MODULE_SPEC_MAP[module_spec](config, fla_config).to(device=device, dtype=dtype)
+  legacy_module = LEGACY_MODULE_SPEC_MAP[module_spec](config, fla_config).to(device=DEVICE, dtype=dtype)
   _initialize(legacy_module, config.n_layers)
   legacy_module.eval()
 
-  fla_module = FLA_MODULE_SPEC_MAP[module_spec](config, fla_config).to(device=device, dtype=dtype)
+  fla_module = FLA_MODULE_SPEC_MAP[module_spec](config, fla_config).to(device=DEVICE, dtype=dtype)
   translate_module = TRANSLATE_MODULE_SPEC_MAP[module_spec]
   fla_module.load_state_dict(translate_module(legacy_module.state_dict()), strict=True)
   fla_module.eval()
+
+  legacy_module.to(dtype=torch.bfloat16, device=DEVICE)
+  fla_module.to(dtype=torch.bfloat16, device=DEVICE)
 
   torch.manual_seed(seed)
   inputs = _make_inputs(module_spec, config, legacy_module)
@@ -346,16 +357,15 @@ def test_seeded_initialization_fwd_pass(
 
   config = _normalize_config(legacy_config)
   fla_config = builder.config_builder(config)
-  device = 'cuda' if torch.cuda.is_available() else 'cpu'
   dtype = getattr(torch, config.model_dtype)
 
   torch.manual_seed(seed)
-  legacy_module = LEGACY_MODULE_SPEC_MAP[module_spec](config, fla_config).to(device=device, dtype=dtype)
+  legacy_module = LEGACY_MODULE_SPEC_MAP[module_spec](config, fla_config).to(device=DEVICE, dtype=dtype)
   _initialize(legacy_module, config.n_layers)
   legacy_module.eval()
 
   torch.manual_seed(seed)
-  fla_module = FLA_MODULE_SPEC_MAP[module_spec](config, fla_config).to(device=device, dtype=dtype)
+  fla_module = FLA_MODULE_SPEC_MAP[module_spec](config, fla_config).to(device=DEVICE, dtype=dtype)
   _initialize(fla_module, config.n_layers)
   fla_module.eval()
 
@@ -367,6 +377,9 @@ def test_seeded_initialization_fwd_pass(
     expected = expected_state_dict[name].float()
     actual = fla_state_dict[name].float()
     print(f'{name}: max absolute error {(actual - expected).abs().max()}')
+
+  legacy_module.to(dtype=torch.bfloat16, device=DEVICE)
+  fla_module.to(dtype=torch.bfloat16, device=DEVICE)
 
   torch.manual_seed(seed)
   inputs = _make_inputs(module_spec, config, legacy_module)
@@ -397,17 +410,20 @@ def test_translated_module_bwd_pass(
   legacy_module = LEGACY_MODULE_SPEC_MAP[module_spec](config, fla_config)
   fla_module = FLA_MODULE_SPEC_MAP[module_spec](config, fla_config)
 
-  legacy_module.to(device=reference_tensor.device, dtype=reference_tensor.dtype)
+  legacy_module.to(device=DEVICE, dtype=reference_tensor.dtype)
   legacy_module.load_state_dict(_clone_state_dict(legacy_state_dict), strict=True)
   legacy_module.eval()
   legacy_module.zero_grad(set_to_none=True)
 
-  fla_module.to(device=reference_tensor.device, dtype=reference_tensor.dtype)
+  fla_module.to(device=DEVICE, dtype=reference_tensor.dtype)
   translate_module = TRANSLATE_MODULE_SPEC_MAP[module_spec]
   translated_state_dict = translate_module(_clone_state_dict(legacy_state_dict))
   fla_module.load_state_dict(_clone_state_dict(translated_state_dict), strict=True)
   fla_module.eval()
   fla_module.zero_grad(set_to_none=True)
+
+  legacy_module.to(dtype=torch.bfloat16, device=DEVICE)
+  fla_module.to(dtype=torch.bfloat16, device=DEVICE)
 
   torch.manual_seed(0)
   inputs = _make_inputs(module_spec, config, legacy_module)
@@ -442,12 +458,11 @@ def test_translated_module_bwd_pass(
 def main() -> None:
   config = _make_legacy_config()
   fla_config = builder.config_builder(config)
-  device = 'cuda' if torch.cuda.is_available() else 'cpu'
   dtype = torch.float32
 
   for module_spec, factory in LEGACY_MODULE_SPEC_MAP.items():
     torch.manual_seed(0)
-    legacy_module = factory(config, fla_config).to(device=device, dtype=dtype)
+    legacy_module = factory(config, fla_config).to(device=DEVICE, dtype=dtype)
     legacy_state_dict = legacy_module.state_dict()
 
     print(f'--- {module_spec} forward ---')
