@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -euo pipefail
+
 # tell us which cluster we're on
 detect_cluster() {
   case "$(hostname -f)" in
@@ -23,13 +25,29 @@ find_project() {
 CLUSTER_ID=$(detect_cluster)
 PROJECT=$(find_project)
 
-echo $CLUSTER_ID $PROJECT
+echo "$CLUSTER_ID $PROJECT"
 
-cd $PROJECT
+cd "$PROJECT"
 
-config=$PROJECT"/src/config/throughput/gdn_300M.yaml"
+ATTN_06B_CONFIG="$PROJECT/src/config/throughput/attn_0.6B.yaml"
+ATTN_1B_CONFIG="$PROJECT/src/config/throughput/attn_1B.yaml"
+
+MODEL_SIZE="${1:-0.6B}"
+GRAD_ACCUMULATION_STEPS="${2:-}"
+gas_args=()
+if [[ -n "$GRAD_ACCUMULATION_STEPS" ]]; then
+  gas_args=(--grad_accumulation_steps "$GRAD_ACCUMULATION_STEPS")
+fi
+case "$MODEL_SIZE" in
+  0.6B) config="$ATTN_06B_CONFIG" ;;
+  1B) config="$ATTN_1B_CONFIG" ;;
+  *) echo "Usage: $0 [0.6B|1B] [GAS]" >&2; exit 2 ;;
+esac
 
 python -m experiments.measure_throughput \
-  --config $config \
+  --config "$config" \
+  --backend "legacy" \
+  --cluster_id "$CLUSTER_ID" \
   --use_flex "yes" \
-  --use_intra_doc_masking "yes"
+  --use_intra_doc_masking "yes" \
+  "${gas_args[@]}"

@@ -4,7 +4,6 @@ import torch
 from torch import distributed as dist
 from torch.nn import CrossEntropyLoss
 from torch.nn.parallel import DistributedDataParallel as DDP
-from torch.utils.flop_counter import FlopCounterMode
 
 from src.data.data_prep_utils import intra_doc_causal_mask, intra_doc_masking_linear
 from src.models import get_param_groups
@@ -12,7 +11,7 @@ from src.optim import initialize_scheduler, intialize_optimizer
 from src.optim.lr_schedule import LinearCooldown
 
 try:
-  from torch.nn.attention.flex_attention import BlockMask, create_block_mask
+  from torch.nn.attention.flex_attention import create_block_mask
 
   _FLEX_ATTENTION_AVAILABLE = True
 except ImportError:
@@ -63,7 +62,7 @@ def _build_flex_block_mask(docs_lengths_batch, seq_len, device):
   return block_mask
 
 
-def _move_to_device(batch, seq_len, device, intra_doc_masking, use_flex_attention=True):
+def _move_to_device(batch, seq_len, device, intra_doc_masking, use_flex_attention=True, backend='legacy'):
   """Slice batch to get inputs and targets, and move them to device."""
   bsz = batch['input_ids'].shape[0]
 
@@ -71,7 +70,9 @@ def _move_to_device(batch, seq_len, device, intra_doc_masking, use_flex_attentio
   targets = batch['input_ids'][:, 1:seq_len]  # WE ALWAYS MAKE LABELS FROM INPUTS: HF-STYLE
 
   if intra_doc_masking:
-    if use_flex_attention:
+    if backend == 'fla':
+      attn_mask = None
+    elif use_flex_attention:
       attn_mask = _build_flex_block_mask(batch['docs_lengths'], seq_len, device)
     else:
       masks = [intra_doc_causal_mask(doc_lengths, seq_len + 1, device) for doc_lengths in batch['docs_lengths']]
@@ -85,22 +86,42 @@ def _move_to_device(batch, seq_len, device, intra_doc_masking, use_flex_attentio
     linear_masks = torch.cat(linear_masks, dim=0)
     linear_masks = linear_masks[:, :seq_len]
 
-    boundaries = [subitem for doc_lengths in batch['docs_lengths'] for subitem in [0] + doc_lengths]
-    flat_lengths = [l for docs in batch['docs_lengths'] for l in docs]
-    cu_seqlens = torch.zeros(len(flat_lengths) + 1, dtype=torch.int32, device=device)
-    cu_seqlens[1:] = torch.cumsum(torch.tensor(flat_lengths, device=device), dim=0)
+    if backend == 'fla':
+      flat_lengths = []
+      for doc_lengths in batch['docs_lengths']:
+        remaining = seq_len
+        for doc_length in doc_lengths:
+          segment_length = min(doc_length, remaining)
+          if segment_length > 0:
+            flat_lengths.append(segment_length)
+            remaining -= segment_length
+          if remaining == 0:
+            break
+        if remaining != 0:
+          raise ValueError('Document lengths do not cover the model input sequence length.')
 
-    limit = int(bsz * seq_len)
-    valid = cu_seqlens <= limit
-    cu_seqlens = cu_seqlens[valid]
+      cu_seqlens = torch.zeros(len(flat_lengths) + 1, dtype=torch.int32, device=device)
+      cu_seqlens[1:] = torch.cumsum(torch.tensor(flat_lengths, dtype=torch.int32, device=device), dim=0)
 
-    if cu_seqlens[-1] != limit:
-      cu_seqlens = torch.tensor(cu_seqlens.tolist() + [limit]).to(dtype=torch.int32, device=device)
+      assert cu_seqlens[-1] == bsz * seq_len, cu_seqlens
+    else:
+      flat_lengths = [length for doc_lengths in batch['docs_lengths'] for length in doc_lengths]
+      cu_seqlens = torch.zeros(len(flat_lengths) + 1, dtype=torch.int32, device=device)
+      cu_seqlens[1:] = torch.cumsum(torch.tensor(flat_lengths, device=device), dim=0)
 
-    assert cu_seqlens.argmax() == cu_seqlens.shape[0] - 1, cu_seqlens
+      limit = int(bsz * seq_len)
+      valid = cu_seqlens <= limit
+      cu_seqlens = cu_seqlens[valid]
+
+      if cu_seqlens[-1] != limit:
+        cu_seqlens = torch.tensor(cu_seqlens.tolist() + [limit]).to(dtype=torch.int32, device=device)
+
+      assert cu_seqlens.argmax() == cu_seqlens.shape[0] - 1, cu_seqlens
 
   else:
-    if use_flex_attention:
+    if backend == 'fla':
+      attn_mask = torch.ones((bsz, seq_len), dtype=torch.bool, device=device)
+    elif use_flex_attention:
       attn_mask = None
     else:
       attn_mask = (
@@ -122,7 +143,7 @@ def _move_to_device(batch, seq_len, device, intra_doc_masking, use_flex_attentio
 
 
 def apply_compile(model: torch.nn.Module) -> torch.nn.Module:
-  blocks = getattr(model, 'layers')
+  blocks = model.layers
   assert blocks is not None, 'Error: `model.layers` is set to `None`.'
 
   for layer_id, block in blocks.named_children():
@@ -148,7 +169,7 @@ def apply_compile(model: torch.nn.Module) -> torch.nn.Module:
 
 
 class TorchEngine(torch.nn.Module):
-  def __init__(self, model, cfg, device, local_rank, ckpt):
+  def __init__(self, model, cfg, device, local_rank, ckpt, backend='legacy'):
     super().__init__()
 
     self.micro_steps = 0
@@ -160,8 +181,12 @@ class TorchEngine(torch.nn.Module):
     self.dtype = cfg.dtype
     self.intra_doc_masking = getattr(cfg, 'intra_doc_masking', False)
     self.use_flex_attention = getattr(cfg, 'use_flex_attention', True)
+    self.backend = backend
 
-    if self.use_flex_attention and not _FLEX_ATTENTION_AVAILABLE:
+    if self.backend not in {'legacy', 'fla'}:
+      raise ValueError(f'Unsupported backend: {self.backend}')
+
+    if self.backend == 'legacy' and self.use_flex_attention and not _FLEX_ATTENTION_AVAILABLE:
       raise ImportError(
         'use_flex_attention=True requires PyTorch >= 2.5. Update PyTorch or set use_flex_attention=False.'
       )
@@ -179,7 +204,8 @@ class TorchEngine(torch.nn.Module):
     # Compile
     if cfg.torch_compile:
       print('Compiling the model...')
-      self.model = apply_compile(self.model)
+      compile_fn = torch.compile if self.backend == 'fla' else apply_compile
+      self.model = compile_fn(self.model)
     
     # Move to DDP
     if torch.distributed.is_initialized():
@@ -222,6 +248,20 @@ class TorchEngine(torch.nn.Module):
     # if cfg.count_flops:
     #   flop_counter = FlopCounterMode(self.model, display=False)
 
+  def _forward(self, inputs, attention_mask, linear_mask, cu_seqlens):
+    if self.backend == 'legacy':
+      return self.model(inputs, attention_mask, linear_mask, cu_seqlens)
+
+    model_kwargs = {
+      'input_ids': inputs,
+      'attention_mask': attention_mask,
+      'past_key_values': None,
+      'inputs_embeds': None,
+    }
+    if self.intra_doc_masking:
+      model_kwargs.update(linear_mask=linear_mask, cu_seqlens=cu_seqlens)
+    return self.model(**model_kwargs)
+
   def step(self, batch):
     """Wraps a fwd pass, bwd pass, and optimization step."""
 
@@ -231,7 +271,7 @@ class TorchEngine(torch.nn.Module):
     self.accumulated_samples += 1
 
     inputs, targets, attn_mask, linear_mask, cu_seqlens = _move_to_device(
-      batch, self.seq_len, self.device, self.intra_doc_masking, self.use_flex_attention
+      batch, self.seq_len, self.device, self.intra_doc_masking, self.use_flex_attention, self.backend
     )
 
     # sync (reduce) gradients at the last accumulation step
@@ -240,7 +280,7 @@ class TorchEngine(torch.nn.Module):
 
     # forward pass with autocasting
     with self.ctx:
-      output = self.model(inputs, attn_mask, linear_mask, cu_seqlens)
+      output = self._forward(inputs, attn_mask, linear_mask, cu_seqlens)
       logits = getattr(output, 'logits', output)
       loss = self.criterion(
         logits[:, :-1, :].reshape(-1, logits.size(-1)).contiguous(), targets.reshape(-1).contiguous()
@@ -287,10 +327,10 @@ class TorchEngine(torch.nn.Module):
     num_batches = 0
     for batch in dataloader:
       inputs, targets, attn_mask, linear_mask, cu_seqlens = _move_to_device(
-        batch, self.seq_len, self.device, self.intra_doc_masking, self.use_flex_attention
+        batch, self.seq_len, self.device, self.intra_doc_masking, self.use_flex_attention, self.backend
       )
       with self.ctx:
-        output = self.model(inputs, attn_mask, linear_mask, cu_seqlens)
+        output = self._forward(inputs, attn_mask, linear_mask, cu_seqlens)
         logits = getattr(output, 'logits', output)
         loss = self.criterion(
           logits[:, :-1, :].reshape(-1, logits.size(-1)).contiguous(), targets.reshape(-1).contiguous()

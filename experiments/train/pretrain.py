@@ -1,16 +1,14 @@
-import time
 from collections import defaultdict
-from contextlib import nullcontext, suppress
+from contextlib import nullcontext
 
 import torch
 from absl import app, flags
-from torch.utils.flop_counter import FlopCounterMode
 from transformers import AutoModelForCausalLM
 
 from src import utils
 from src.data import get_dataloaders
 from src.engine import TorchEngine
-from src.models import construct_model, config_builder
+from src.models import config_builder, construct_model
 from src.utils.base_utils import print_master
 from src.utils.checkpoint_utils import (
   create_save_steps,
@@ -63,17 +61,19 @@ def main(argv):
   # Model
   if FLAGS.backend == 'legacy':
     model, _ = construct_model(cfg)
+    non_embed_params = model.count_params(non_embedding=True)
+    total_params = model.count_params(non_embedding=False)
 
   elif FLAGS.backend == 'fla':
     cfg.torch_compile = False
     model_config = config_builder(cfg)
     model = AutoModelForCausalLM.from_config(model_config)
+    total_params = sum(parameter.numel() for parameter in model.parameters())
+    non_embed_params = total_params - model.get_input_embeddings().weight.numel()
 
   else:
     raise NotImplementedError("Unsupported value provided to `--backend`, only `legacy` and `fla` are supported.")
 
-  non_embed_params = model.count_params(non_embedding=True)
-  total_params = model.count_params(non_embedding=False)
   print_master(
     f'Initialized model with {round(non_embed_params / 1e6, 2)}M non-embedding params, or, {round(total_params / 1e6)}M total params'
   )
@@ -82,7 +82,7 @@ def main(argv):
   # Engine
   steps_budget = utils.get_steps_budget(cfg, world_size)
   cfg.steps_budget = steps_budget
-  engine = TorchEngine(model, cfg, device, local_rank, ckpt)
+  engine = TorchEngine(model, cfg, device, local_rank, ckpt, backend=FLAGS.backend)
 
   print_master(
     f'Training till {steps_budget} step point, or, {steps_budget * cfg.grad_accumulation_steps} micro step point'
@@ -154,10 +154,9 @@ def main(argv):
 
     # Validation loop
     valid_loss = None
-    if cfg.eval and is_step:
-      if step % cfg.eval_every_steps == 0 or step == steps_budget:  # last step
-        print_master('Evaluating on validation set')
-        valid_loss = engine.eval(validloader)
+    if cfg.eval and is_step and (step % cfg.eval_every_steps == 0 or step == steps_budget):
+      print_master('Evaluating on validation set')
+      valid_loss = engine.eval(validloader)
 
     # Log
     if master_process and step % cfg.log_every_steps == 0 and is_step:

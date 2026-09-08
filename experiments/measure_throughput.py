@@ -1,17 +1,16 @@
 import random
-import time
 from collections import defaultdict
-from contextlib import nullcontext, suppress
+from contextlib import nullcontext
 
 import numpy as np
 import torch
 from absl import app, flags
-from torch.utils.flop_counter import FlopCounterMode
+from transformers import AutoModelForCausalLM
 
 from src import utils
 from src.data import get_dataloaders
 from src.engine import TorchEngine
-from src.models import construct_model
+from src.models import config_builder, construct_model
 from src.utils.base_utils import print_master
 from src.utils.throughput_utils import ThroughputMeasurement, parse_throughput_metrics
 from src.utils.torch_utils import destroy_ddp, pytorch_setup
@@ -21,6 +20,9 @@ flags.DEFINE_string('use_flex', 'no', 'Use flex attention.')
 flags.DEFINE_string('use_intra_doc_masking', 'no', 'Use packing-based intra-doc masking.')
 flags.DEFINE_integer('job_idx', None, 'Job idx for job-array sweeps. From 0 to n-1.')
 flags.DEFINE_integer('job_cluster', None, 'Job cluster ID.')
+flags.DEFINE_string('backend', 'fla', 'Which model backend are we using?')
+flags.DEFINE_string('cluster_id', 'mpi', 'Which cluster are we running things on?')
+flags.DEFINE_integer('grad_accumulation_steps', None, 'Override gradient accumulation steps.')
 FLAGS = flags.FLAGS
 
 
@@ -35,10 +37,16 @@ def setup(seed):
 
 def main(argv):
   CFG_PATH = FLAGS.config
+  backend = FLAGS.backend
   cfg, _ = utils.load_config(CFG_PATH)
   setup(cfg.seed)
 
   cfg.measure_throughput = True
+
+  if backend == 'fla':
+    cfg.torch_compile = False
+  elif backend == 'legacy':
+    cfg.torch_compile = True
 
   if FLAGS.use_flex == 'no':
     cfg.use_flex_attention = False
@@ -57,8 +65,14 @@ def main(argv):
 
   local_rank, world_size, device, master_process = pytorch_setup(cfg)
   utils.set_arch(cfg)
-  utils.set_batch_sizes(cfg, world_size)
+  utils.set_batch_sizes(cfg, world_size, FLAGS.cluster_id)
   utils.set_token_budget_id_from_gbs(cfg)
+
+  if FLAGS.grad_accumulation_steps is not None:
+    if FLAGS.grad_accumulation_steps < 1:
+      raise ValueError('--grad_accumulation_steps must be at least 1.')
+    cfg.grad_accumulation_steps = FLAGS.grad_accumulation_steps
+    cfg.global_batch_size = cfg.micro_batch_size * cfg.grad_accumulation_steps * world_size
   ckpt = None
 
   print_master(f'Measuring throughput of {cfg.arch_id.upper()} [{cfg.param_scale_id}] LLM')
@@ -70,18 +84,31 @@ def main(argv):
     utils.init_wandb(cfg)
     utils.log_job_info()
 
-  trainloader, validloader = get_dataloaders(cfg)
+  trainloader, _ = get_dataloaders(cfg)
 
-  model, _ = construct_model(cfg)
-  non_embed_params = model.count_params(non_embedding=True)
-  total_params = model.count_params(non_embedding=False)
+  if backend == 'legacy':
+    model, _ = construct_model(cfg)
+    input_embeddings = model.embed_tokens
+  elif backend == 'fla':
+    model_config = config_builder(cfg)
+    model = AutoModelForCausalLM.from_config(model_config)
+    input_embeddings = model.get_input_embeddings()
+    assert input_embeddings.weight is model.get_output_embeddings().weight
+  else:
+    raise NotImplementedError(
+      "Unsupported value provided to --backend, only legacy and fla are supported."
+    )
+
+  print_master(model)
+  total_params = sum(parameter.numel() for parameter in model.parameters())
+  non_embed_params = total_params - input_embeddings.weight.numel()
   print_master(
     f'Initialized model with {round(non_embed_params / 1e6, 2)}M non-embedding params, or, {round(total_params / 1e6)}M total params'
   )
 
   steps_budget = utils.get_steps_budget(cfg, world_size)
   cfg.steps_budget = steps_budget
-  engine = TorchEngine(model, cfg, device, local_rank, ckpt)
+  engine = TorchEngine(model, cfg, device, local_rank, ckpt, backend=backend)
 
   micro_step_budget = steps_budget * cfg.grad_accumulation_steps
   utils.set_eval_every(cfg)
@@ -93,8 +120,6 @@ def main(argv):
   micro_step_start = step_start * cfg.grad_accumulation_steps
 
   metrics = defaultdict(list)
-  if ckpt is not None:
-    metrics = defaultdict(list, load_metrics_from_checkpoint(cfg, world_size, cluster_id))
 
   train_loss_array = []
   throughput_ctx = (
