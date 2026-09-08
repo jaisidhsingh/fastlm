@@ -1,51 +1,11 @@
-"""Compare training losses across backends around a translated resume.
-
-Three models run on the same batches:
-
-- `legacy`, a legacy `Transformer`, holding the full optimizer state
-- `translated`, an FLA model holding the legacy weights and the legacy AdamW
-  state, both put through the backend translation
-- a baseline, whose meaning depends on the mode below
-
-With `--ckpt-path`, the model config, the weights and the AdamW state all come
-from a checkpoint written by `src.utils.checkpoint_utils.save_checkpoint`, and
-the baseline is `weights_only`: an FLA model holding the translated weights but
-a fresh optimizer, which is what a resume gives without `translate_adamw`. It
-shows what the optimizer translation buys.
-
-Without `--ckpt-path`, a legacy model is built from scratch, run for
-`--resume-step` steps, and then translated. The baseline is `control`: an FLA
-model translated before any step, which runs every step with its own optimizer
-and so needs no optimizer translation. It measures how far the two backends
-drift on their own.
-
-Batches are random token ids, not real data. The comparison is between backends
-on identical inputs, so it holds either way, but the loss values themselves mean
-nothing on their own.
-
-Parameters stay in float32 and the forward runs under bfloat16 autocast, which
-is what `TorchEngine.step` runs. FLA attention calls flash-attn, which accepts
-only fp16 and bf16, so a float32 forward is not an option.
-
-Intra-document masking is forced off. Its branch in `GatedDeltaNet.forward`
-needs `cu_seqlens` and `linear_mask`, which random batches do not carry. Both
-backends are treated the same way, so the comparison stands, but the loss is not
-the one the original run saw.
-
-The GDN backward needs tilelang, and tilelang locates CUDA through `nvcc`, so
-run `module load cuda/12.9` first for any architecture holding a GDN layer.
-
-Run with `python -m testing.translated_optimiser_loss`, not
-`python testing/...`, which puts `testing/` on sys.path instead of the repo root.
-"""
-
 from __future__ import annotations
 
-import argparse
+from dataclasses import dataclass
 from types import SimpleNamespace
 from typing import NamedTuple
 
 import torch
+import tyro
 from torch import nn
 from transformers import AutoModelForCausalLM
 
@@ -66,60 +26,42 @@ class Hyperparameters(NamedTuple):
   fused: bool
 
 
-def parse_args() -> argparse.Namespace:
-  parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-  parser.add_argument(
-    '--ckpt-path',
-    default=None,
-    help='checkpoint written by save_checkpoint; supplies the model config, the weights and the AdamW state',
-  )
-  parser.add_argument('--steps', type=int, default=3, help='total optimization steps')
-  parser.add_argument(
-    '--resume-step',
-    type=int,
-    default=None,
-    help='legacy steps taken before the translation; defaults to 0 with --ckpt-path, else --steps minus one',
-  )
-  parser.add_argument('--batch-size', type=int, default=2)
-  parser.add_argument('--batch-seed', type=int, default=1, help='seed for the token batches')
-  parser.add_argument('--no-baseline', action='store_true', help='skip the third model')
-
-  shape = parser.add_argument_group('model shape, ignored when --ckpt-path is given')
-  shape.add_argument(
-    '--arch-id',
-    default='gdn+attn_1-1',
-    help="architecture, for example 'attn', 'gdn', 'gdn+attn_3-1'",
-  )
-  shape.add_argument('--n-layers', type=int, default=4)
-  shape.add_argument('--dim', type=int, default=64)
-  shape.add_argument('--n-heads', type=int, default=4)
-  shape.add_argument('--seq-len', type=int, default=128, help='must clear the 64 token GDN chunk size')
-  shape.add_argument('--vocab-size', type=int, default=256)
-  shape.add_argument('--expand', default='4')
-  shape.add_argument('--seed', type=int, default=0, help='seed for the legacy initialization')
-
-  optim = parser.add_argument_group('optimizer, ignored when --ckpt-path is given')
-  optim.add_argument('--lr', type=float, default=1e-3)
-  optim.add_argument('--weight-decay', type=float, default=0.1)
-  optim.add_argument('--beta1', type=float, default=0.9)
-  optim.add_argument('--beta2', type=float, default=0.95)
-  optim.add_argument('--eps', type=float, default=1e-8)
-  optim.add_argument('--fused', action='store_true')
-
-  args = parser.parse_args()
-
-  if args.steps < 1:
-    parser.error('--steps must be at least 1')
-  if args.resume_step is None:
-    # With a checkpoint the resume point is the checkpoint itself, so translate
-    # before any step unless asked otherwise.
-    args.resume_step = 0 if args.ckpt_path is not None else args.steps - 1
-  if not 0 <= args.resume_step < args.steps:
-    parser.error(f'--resume-step must be in range(0, {args.steps}), got {args.resume_step}')
-  return args
+@dataclass
+class Config:
+  ckpt_path: str | None = None
+  steps: int = 3
+  resume_step: int | None = None
+  batch_size: int = 2
+  batch_seed: int = 1
+  no_baseline: bool = False
+  arch_id: str = 'gdn+attn_1-1'
+  n_layers: int = 4
+  dim: int = 64
+  n_heads: int = 4
+  seq_len: int = 128
+  vocab_size: int = 256
+  expand: str = '4'
+  seed: int = 0
+  lr: float = 1e-3
+  weight_decay: float = 0.1
+  beta1: float = 0.9
+  beta2: float = 0.95
+  eps: float = 1e-8
+  fused: bool = False
 
 
-def build_config(args: argparse.Namespace) -> SimpleNamespace:
+def parse_args() -> Config:
+  config = tyro.cli(Config)
+  if config.steps < 1:
+    raise ValueError(f'steps must be at least 1, got {config.steps}')
+  if config.resume_step is None:
+    config.resume_step = 0 if config.ckpt_path is not None else config.steps - 1
+  if not 0 <= config.resume_step < config.steps:
+    raise ValueError(f'resume_step must be in range(0, {config.steps}), got {config.resume_step}')
+  return config
+
+
+def build_config(args: Config) -> SimpleNamespace:
   arch, ratio = builder.parse_arch_id(args.arch_id)
   return _normalize_config(
     dict(
@@ -181,7 +123,7 @@ def config_from_checkpoint(values: dict) -> SimpleNamespace:
   )
 
 
-def hyperparameters_from_args(args: argparse.Namespace) -> Hyperparameters:
+def hyperparameters_from_args(args: Config) -> Hyperparameters:
   return Hyperparameters(
     lr=args.lr,
     weight_decay=args.weight_decay,
@@ -249,7 +191,6 @@ def build_legacy_model(config: SimpleNamespace, seed: int) -> nn.Module:
 
 
 def build_fla_model(config: SimpleNamespace, legacy_model: nn.Module) -> nn.Module:
-  """Build an FLA model holding the current legacy weights."""
   model = AutoModelForCausalLM.from_config(builder.config_builder(config)).to(device=DEVICE, dtype=torch.float32)
   model.load_state_dict(
     translate_model(
@@ -326,7 +267,6 @@ def build_translated(
   config: SimpleNamespace,
   hparams: Hyperparameters,
 ) -> tuple[nn.Module, torch.optim.AdamW]:
-  """Build an FLA model and optimizer from the current legacy model and optimizer."""
   model = build_fla_model(config, legacy_model)
   optimizer = build_adamw(model, hparams)
   optimizer.load_state_dict(
@@ -350,17 +290,11 @@ def build_weights_only(
   config: SimpleNamespace,
   hparams: Hyperparameters,
 ) -> tuple[nn.Module, torch.optim.AdamW]:
-  """Build an FLA model with translated weights and a fresh optimizer.
-
-  This is what a resume gives without `translate_adamw`: the right weights on
-  zero moments, so the first steps of the decay run on a different optimizer
-  state than the schedule assumes.
-  """
   model = build_fla_model(config, legacy_model)
   return model, build_adamw(model, hparams)
 
 
-def make_batches(config: SimpleNamespace, args: argparse.Namespace) -> list[torch.Tensor]:
+def make_batches(config: SimpleNamespace, args: Config) -> list[torch.Tensor]:
   generator = torch.Generator(device='cpu').manual_seed(args.batch_seed)
   if config.seq_len != 2048:
       config.seq_len = 2048
@@ -385,7 +319,6 @@ def step(
   *,
   fla_backend: bool,
 ) -> float:
-  """Take one optimization step and return the loss before the update."""
   optimizer.zero_grad(set_to_none=True)
   with torch.amp.autocast(device_type=DEVICE.type, dtype=torch.bfloat16):
     logits = model(batch).logits if fla_backend else model(batch)
@@ -500,8 +433,6 @@ def main() -> None:
 
     rows.append((number, legacy_loss, translated_loss, baseline_loss))
 
-    # The legacy step for this batch has been taken, so the legacy model now
-    # holds exactly `number` steps. Translate once it reaches --resume-step.
     if translated_model is None and number == args.resume_step:
       translated_model, translated_optimizer = build_translated(legacy_model, legacy_optimizer, config, hparams)
 

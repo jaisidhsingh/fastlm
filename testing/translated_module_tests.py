@@ -46,7 +46,6 @@ def _relative(difference: float, reference: float) -> float:
 
 
 def _token_rms(tensor: torch.Tensor) -> float:
-  """Average the RMS norm of the token vectors over batch and sequence length."""
   return tensor.float().pow(2).mean(dim=-1).sqrt().mean().item()
 
 
@@ -503,7 +502,6 @@ def test_initialization_fwd_pass(
   legacy_config: dict | SimpleNamespace,
   seed: int = 0,
 ) -> None:
-  """Initialize the legacy module and translate that initialization into FLA."""
   if module_spec not in LEGACY_MODULE_SPEC_MAP:
     raise ValueError(f'Unknown module_spec {module_spec!r}; expected one of {sorted(LEGACY_MODULE_SPEC_MAP)}.')
 
@@ -540,7 +538,6 @@ def test_seeded_initialization_fwd_pass(
   legacy_config: dict | SimpleNamespace,
   seed: int = 0,
 ) -> None:
-  """Initialize both backends independently under one seed, without translation."""
   if module_spec not in LEGACY_MODULE_SPEC_MAP:
     raise ValueError(f'Unknown module_spec {module_spec!r}; expected one of {sorted(LEGACY_MODULE_SPEC_MAP)}.')
 
@@ -664,7 +661,6 @@ def _legacy_model_config(config: SimpleNamespace) -> ModelConfig:
 
 
 def test_translated_model_fwd_pass(legacy_config: dict | SimpleNamespace, seed: int = 0) -> None:
-  """Translate a whole legacy Transformer into the FLA model and compare logits."""
   config = _normalize_config(legacy_config)
   fla_config = builder.config_builder(config)
   _, ratio = builder.parse_arch_id(config.arch_id)

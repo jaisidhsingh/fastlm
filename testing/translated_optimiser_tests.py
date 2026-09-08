@@ -194,7 +194,6 @@ def _injected_updates(
 
 
 def test_index_recovery(config: SimpleNamespace) -> None:
-  """Check that ordered_param_names names exactly the parameters get_param_groups returns."""
   legacy_model, fla_model = _build_models(config)
   for label, model in (('legacy', legacy_model), ('fla', fla_model)):
     groups = ordered_param_names(model, WEIGHT_DECAY)
@@ -207,11 +206,6 @@ def test_index_recovery(config: SimpleNamespace) -> None:
 
 
 def test_probe_is_constant(config: SimpleNamespace) -> None:
-  """Check that every tensor translate_model returns from the probe is constant valued.
-
-  recover_name_map raises when it is not. This test states the check explicitly,
-  and reports the synthesized parameters it finds.
-  """
   legacy_model, fla_model = _build_models(config)
   legacy_names = [name for group in ordered_param_names(legacy_model, WEIGHT_DECAY) for name in group]
   name_map = recover_name_map(
@@ -435,7 +429,6 @@ def test_moment_placement(config: SimpleNamespace) -> None:
 
 
 def test_gate_bias(config: SimpleNamespace) -> None:
-  """Check the synthesized attention gate bias: zero moments, inherited step, no-decay group."""
   legacy_model, fla_model = _build_models(config)
   legacy_optimizer = _build_adamw(legacy_model)
   for batch in _batches(config, 2):
@@ -477,7 +470,6 @@ def test_gate_bias(config: SimpleNamespace) -> None:
 
 
 def test_rejection(config: SimpleNamespace) -> None:
-  """Check that non-AdamW state and a truncated param_groups raise."""
   legacy_model, fla_model = _build_models(config)
   attn_layers = _attn_layers(config)
   batch = _batches(config, 1)[0]
