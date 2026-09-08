@@ -5,11 +5,12 @@ from contextlib import nullcontext, suppress
 import torch
 from absl import app, flags
 from torch.utils.flop_counter import FlopCounterMode
+from transformers import AutoModelForCausalLM
 
 from src import utils
 from src.data import get_dataloaders
 from src.engine import TorchEngine
-from src.models import construct_model
+from src.models import construct_model, config_builder
 from src.utils.base_utils import print_master
 from src.utils.checkpoint_utils import (
   create_save_steps,
@@ -24,6 +25,7 @@ flags.DEFINE_string('config', 'src/config/cfg_test.yaml', 'Path to config.yaml f
 flags.DEFINE_integer('job_idx', None, 'Job idx for job-array sweeps. From 0 to n-1.')
 flags.DEFINE_integer('job_cluster', None, 'Job cluster ID.')
 flags.DEFINE_string('cluster_id', None, 'Which cluster are we running things on?')
+flags.DEFINE_string('backend', 'legacy', 'Which model backend are we using?')
 FLAGS = flags.FLAGS
 
 
@@ -59,7 +61,17 @@ def main(argv):
   trainloader, validloader = get_dataloaders(cfg)
 
   # Model
-  model, _ = construct_model(cfg)
+  if FLAGS.backend == 'legacy':
+    model, _ = construct_model(cfg)
+
+  elif FLAGS.backend == 'fla':
+    cfg.torch_compile = False
+    model_config = config_builder(cfg)
+    model = AutoModelForCausalLM.from_config(model_config)
+
+  else:
+    raise NotImplementedError("Unsupported value provided to `--backend`, only `legacy` and `fla` are supported.")
+
   non_embed_params = model.count_params(non_embedding=True)
   total_params = model.count_params(non_embedding=False)
   print_master(

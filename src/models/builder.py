@@ -7,6 +7,20 @@ from src.models.legacy.transformer import ModelConfig
 CONFIG_MAP = {'attn': TransformerConfig, 'gdn': GatedDeltaNetConfig}
 # `Transformer` builds its rotary embeddings with `precompute_freqs_cis(head_dim, seq_len, 500000)`.
 ROPE_THETA = 500000
+# `GLU` and `MLPReluSquared` take this as the `multiple_of` default.
+MLP_MULTIPLE_OF = 256
+
+
+def get_intermediate_size(cfg: SimpleNamespace) -> int:
+  """Size the FFN hidden dimension the way the legacy MLP sizes it.
+
+  `Block` passes `int(cfg.expand * cfg.dim)` to the legacy MLP, which then rounds
+  it up to a multiple of 256. FLA takes `intermediate_size` at face value, so the
+  rounding has to be applied here or the two backends build different FFNs
+  whenever `d_model * expand` is not already a multiple of 256.
+  """
+  hidden_dim = int(cfg.d_model * float(Fraction(cfg.expand)))
+  return MLP_MULTIPLE_OF * ((hidden_dim + MLP_MULTIPLE_OF - 1) // MLP_MULTIPLE_OF)
 
 
 def parse_arch_id(arch_id: str):
@@ -93,7 +107,7 @@ def get_hybrid_model_config(cfg: SimpleNamespace, arch: str, ratio: int):
     hidden_size=cfg.d_model,
     num_heads=cfg.n_heads,
     num_hidden_layers=cfg.n_layers,
-    intermediate_size=int(cfg.d_model * float(Fraction(cfg.expand))),
+    intermediate_size=get_intermediate_size(cfg),
     max_position_embeddings=cfg.seq_len,
     vocab_size=cfg.vocab_size,
     attn=attn_config_to_insert,
@@ -114,7 +128,7 @@ def get_pure_model_config(cfg: SimpleNamespace, arch: str):
     hidden_size=cfg.d_model,
     num_heads=cfg.n_heads,
     num_hidden_layers=cfg.n_layers,
-    intermediate_size=int(cfg.d_model * float(Fraction(cfg.expand))),
+    intermediate_size=get_intermediate_size(cfg),
     max_position_embeddings=cfg.seq_len,
     vocab_size=cfg.vocab_size,
     **kwargs,
