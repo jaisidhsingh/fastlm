@@ -1,47 +1,24 @@
-"""
-Check the state of the OpenThesis training grid on Hugging Face
-and visualize progress directly in the terminal.
+"""Print incomplete OpenThesis grid points found on Hugging Face.
 
-Grid:
-    Architecture: 5 values
-    N:            20M, 50M, 150M, 300M
-    GBS:          16, 32, 64, 128, 256
-    LR:           0.00025, 0.0005, 0.001, 0.002, 0.004, 0.008
-    D:            0.5B, 1.0B, 3.0B, 7.5B, 15.0B
+Each grid point is complete only when both of these files exist:
 
-Expected artifact:
-    OpenThesis_{arch_id}/
-        N/
-            gbs_{GBS}/
-                lr_{LR}/
-                    ckpt_decayed_to_{D}.pt
+    OpenThesis_{arch_id}/N/gbs_{GBS}/lr_{LR}/ckpt_decayed_to_{D}.pt
+    OpenThesis_{arch_id}/N/gbs_{GBS}/lr_{LR}/metrics_decayed_to_{D}.json
+
+GBS 16 expects token budgets up to 1.0B, while GBS 32 expects budgets up to 3.0B.
 
 Usage:
-    pip install huggingface_hub
-
-    # If already logged into HF:
-    python check_grid.py
-
-    # Or specify the HF namespace:
-    python check_grid.py --namespace your-hf-username
-
-The script assumes the repositories are dataset repositories.
-Change REPO_TYPE below if they are model repositories.
+    python services/checks/check_grid_status.py --gbs 128
+    python services/checks/check_grid_status.py --gbs 128 --namespace my-hf-org
 """
 
 from __future__ import annotations
 
 import argparse
-import csv
 import itertools
-from pathlib import Path
 
 from huggingface_hub import HfApi
 
-
-# ---------------------------------------------------------------------
-# Configuration
-# ---------------------------------------------------------------------
 
 ARCH_IDS = [
     "attn",
@@ -82,64 +59,54 @@ TOKEN_BUDGETS = [
     "7.5B",
     "15.0B",
 ]
-
 REPO_PREFIX = "OpenThesis_"
-
-# Your repos appear to be dataset repos.
 REPO_TYPE = "dataset"
 
-OUTPUT_MISSING = "missing_grid_points.csv"
+type MissingPoint = tuple[str, str, int, float, str, tuple[str, ...]]
 
-
-# ---------------------------------------------------------------------
-# Formatting helpers
-# ---------------------------------------------------------------------
 
 def format_lr(lr: float) -> str:
-    """
-    Match the LR formatting used in the HF path.
-
-    Examples:
-        0.00025 -> "0.00025"
-        0.001   -> "0.001"
-    """
-    return str(lr).replace(".", "p") 
+    return str(lr).replace(".", "p")
 
 
-def checkpoint_path(
+def artifact_path(
     N: str,
     gbs: int,
     lr: float,
     D: str,
+    filename: str,
 ) -> str:
     return (
         f"{N}/"
         f"gbs_{gbs}/"
         f"lr_{format_lr(lr)}/"
-        f"ckpt_decayed_to_{D.replace('.', 'p')}.pt"
+        f"{filename}_decayed_to_{D.replace('.', 'p')}"
     )
 
 
-# ---------------------------------------------------------------------
-# HF inspection
-# ---------------------------------------------------------------------
+def checkpoint_path(N: str, gbs: int, lr: float, D: str) -> str:
+    return artifact_path(N, gbs, lr, D, "ckpt") + ".pt"
 
-def get_repo_files(
-    api: HfApi,
-    repo_id: str,
-) -> set[str]:
-    """
-    Retrieve all file paths from one HF repository.
 
-    The entire file listing is fetched once per architecture.
-    """
+def metrics_path(N: str, gbs: int, lr: float, D: str) -> str:
+    return artifact_path(N, gbs, lr, D, "metrics") + ".json"
+
+
+def token_budgets_for_gbs(gbs: int) -> list[str]:
+    if gbs == 16:
+        return TOKEN_BUDGETS[:2]
+    if gbs == 32:
+        return TOKEN_BUDGETS[:3]
+    return TOKEN_BUDGETS
+
+
+def get_repo_files(api: HfApi, repo_id: str) -> set[str]:
     try:
         files = api.list_repo_files(
             repo_id=repo_id,
             repo_type=REPO_TYPE,
         )
         return set(files)
-
     except Exception as exc:
         print(f"[WARNING] Could not access {repo_id}: {exc}")
         return set()
@@ -148,289 +115,102 @@ def get_repo_files(
 def check_grid(
     api: HfApi,
     namespace: str,
-):
-    """
-    Return:
-        completed: set of (arch, N, GBS, LR, D)
-        missing:   list of missing tuples
-        repo_files: dict[arch, set[path]]
-    """
-
-    repo_files = {}
-
-    # -------------------------------------------------------------
-    # Download/list each repository exactly once.
-    # -------------------------------------------------------------
-
-    for arch in ARCH_IDS:
-        repo_id = f"{namespace}/{REPO_PREFIX}{arch}"
-
-        print(f"Checking {repo_id} ...")
-
-        repo_files[arch] = get_repo_files(
-            api,
-            repo_id,
-        )
-
-        print(
-            f"    found {len(repo_files[arch]):,} files"
-        )
-
-    # -------------------------------------------------------------
-    # Check every point in the Cartesian product.
-    # -------------------------------------------------------------
-
-    completed = set()
+    max_gbs: int,
+) -> list[MissingPoint]:
+    repo_files = {
+        arch: get_repo_files(api, f"{namespace}/{REPO_PREFIX}{arch}")
+        for arch in ARCH_IDS
+    }
+    selected_gbs_values = [gbs for gbs in GBS_VALUES if gbs <= max_gbs]
     missing = []
 
-    all_points = itertools.product(
+    for arch, N, gbs, lr in itertools.product(
         ARCH_IDS,
         MODEL_SIZES,
-        GBS_VALUES,
+        selected_gbs_values,
         LR_VALUES,
-        TOKEN_BUDGETS,
-    )
+    ):
+        for D in token_budgets_for_gbs(gbs):
+            expected_paths = {
+                "checkpoint": checkpoint_path(N, gbs, lr, D),
+                "metrics": metrics_path(N, gbs, lr, D),
+            }
+            missing_artifacts = tuple(
+                name
+                for name, path in expected_paths.items()
+                if path not in repo_files[arch]
+            )
+            if missing_artifacts:
+                missing.append((arch, N, gbs, lr, D, missing_artifacts))
 
-    for arch, N, gbs, lr, D in all_points:
-
-        path = checkpoint_path(
-            N=N,
-            gbs=gbs,
-            lr=lr,
-            D=D,
-        )
-
-        point = (
-            arch,
-            N,
-            gbs,
-            lr,
-            D,
-        )
-
-        if path in repo_files[arch]:
-            completed.add(point)
-        else:
-            missing.append(point)
-
-    return completed, missing, repo_files
+    return missing
 
 
-# ---------------------------------------------------------------------
-# CSV output
-# ---------------------------------------------------------------------
-
-def write_missing_csv(missing):
-    with open(
-        OUTPUT_MISSING,
-        "w",
-        newline="",
-    ) as f:
-
-        writer = csv.writer(f)
-
-        writer.writerow([
-            "arch_id",
-            "N",
-            "GBS",
-            "LR",
-            "D",
-            "path",
-        ])
-
-        for arch, N, gbs, lr, D in missing:
-            writer.writerow([
-                arch,
-                N,
-                gbs,
-                lr,
-                D,
-                checkpoint_path(
-                    N,
-                    gbs,
-                    lr,
-                    D,
-                ),
-            ])
-
-    print(f"\nMissing grid points written to {OUTPUT_MISSING}")
-
-
-# ---------------------------------------------------------------------
-# Terminal progress visualization
-# ---------------------------------------------------------------------
-
-def terminal_progress(completed):
-    """
-    Print one terminal heatmap per architecture and model size.
-
-    Rows    : GBS
-    Columns : LR
-    Cell    : five-character D completion mask
-
-        □□□□■  -> only 15.0B is complete
-        ■■■□□  -> 0.5B, 1.0B, 3.0B are complete
-        ■■■■■  -> all token budgets are complete
-
-    This preserves the full (N, GBS, LR, D) structure while remaining
-    readable over SSH on a remote cluster.
-    """
-
-    print()
-    print("=" * 100)
-    print("GRID PROGRESS")
-    print("=" * 100)
-
+def print_missing_points(missing: list[MissingPoint]) -> None:
     for arch in ARCH_IDS:
-        print()
-        print(f"ARCHITECTURE: {arch}")
-        print("-" * 100)
+        architecture_points = [point for point in missing if point[0] == arch]
+        if not architecture_points:
+            continue
 
+        print(arch)
         for N in MODEL_SIZES:
-            print()
-            print(f"  N = {N}")
-            print()
-
-            # Header
-            lr_labels = [format_lr(lr) for lr in LR_VALUES]
-
-            print(
-                f"  {'GBS':>5} | "
-                + " | ".join(f"{lr:>7}" for lr in lr_labels)
-            )
-            print(
-                "  "
-                + "-" * (
-                    7 + len(LR_VALUES) * 10
-                )
-            )
-
             for gbs in GBS_VALUES:
-                cells = []
+                points = [
+                    point
+                    for point in architecture_points
+                    if point[1] == N and point[2] == gbs
+                ]
+                if not points:
+                    continue
 
-                for lr in LR_VALUES:
-                    mask = ""
-
-                    for D in TOKEN_BUDGETS:
-                        point = (
-                            arch,
-                            N,
-                            gbs,
-                            lr,
-                            D,
-                        )
-
-                        mask += "■" if point in completed else "□"
-
-                    cells.append(mask)
-
-                print(
-                    f"  {gbs:>5} | "
-                    + " | ".join(f"{cell:^7}" for cell in cells)
+                entire_block_missing = (
+                    len(points)
+                    == len(LR_VALUES) * len(token_budgets_for_gbs(gbs))
+                    and all(
+                        point[5] == ("checkpoint", "metrics")
+                        for point in points
+                    )
                 )
+                if entire_block_missing:
+                    print(
+                        f"  N={N}, GBS={gbs}: all LR x D points missing "
+                        "(checkpoint and metrics)"
+                    )
+                    continue
 
-            print()
-            print(
-                "  D: "
-                + "  ".join(
-                    f"{i + 1}={D}"
-                    for i, D in enumerate(TOKEN_BUDGETS)
-                )
-            )
+                for _, _, _, lr, D, missing_artifacts in points:
+                    artifacts = " and ".join(missing_artifacts)
+                    print(
+                        f"  N={N}, GBS={gbs}, LR={lr}, D={D}: "
+                        f"missing {artifacts}"
+                    )
 
-    # Summary by architecture.
-    print()
-    print("=" * 100)
-    print("ARCHITECTURE SUMMARY")
-    print("=" * 100)
-
-    total_per_arch = (
-        len(MODEL_SIZES)
-        * len(GBS_VALUES)
-        * len(LR_VALUES)
-        * len(TOKEN_BUDGETS)
-    )
-
-    for arch in ARCH_IDS:
-        count = sum(
-            1
-            for point in completed
-            if point[0] == arch
-        )
-
-        percentage = (
-            100.0 * count / total_per_arch
-            if total_per_arch
-            else 0.0
-        )
-
-        print(
-            f"{arch:<16} "
-            f"{count:>5}/{total_per_arch:<5} "
-            f"({percentage:6.2f}%)"
-        )
+        print()
 
 
-# ---------------------------------------------------------------------
-# Main
-# ---------------------------------------------------------------------
-
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Check OpenThesis HF training grid."
+        description="Print incomplete OpenThesis Hugging Face grid points."
     )
-
     parser.add_argument(
         "--namespace",
         default="jaisidhsingh",
         help="Hugging Face username or organization containing the repos.",
     )
+    parser.add_argument(
+        "--gbs",
+        type=int,
+        required=True,
+        help="Check configured global batch sizes less than or equal to this value.",
+    )
 
     args = parser.parse_args()
+    if args.gbs < min(GBS_VALUES):
+        parser.error(f"--gbs must be at least {min(GBS_VALUES)}")
 
-    api = HfApi()
-
-    total = (
-        len(ARCH_IDS)
-        * len(MODEL_SIZES)
-        * len(GBS_VALUES)
-        * len(LR_VALUES)
-        * len(TOKEN_BUDGETS)
-    )
-
-    print("=" * 70)
-    print("OpenThesis Grid Check")
-    print("=" * 70)
-
-    print(f"Architectures : {len(ARCH_IDS)}")
-    print(f"Model sizes   : {len(MODEL_SIZES)}")
-    print(f"GBS values    : {len(GBS_VALUES)}")
-    print(f"LR values     : {len(LR_VALUES)}")
-    print(f"Token budgets : {len(TOKEN_BUDGETS)}")
-    print(f"Total grid    : {total:,}")
-    print()
-
-    completed, missing, _ = check_grid(
-        api,
-        args.namespace,
-    )
-
-    percentage = 100.0 * len(completed) / total
-
-    print()
-    print("=" * 70)
-    print("RESULT")
-    print("=" * 70)
-    print(f"Complete : {len(completed):,} / {total:,}")
-    print(f"Missing  : {len(missing):,} / {total:,}")
-    print(f"Progress : {percentage:.2f}%")
-    print("=" * 70)
-
-    write_missing_csv(missing)
-
-    terminal_progress(completed)
+    missing = check_grid(HfApi(), args.namespace, args.gbs)
+    print_missing_points(missing)
 
 
 if __name__ == "__main__":
     main()
-
