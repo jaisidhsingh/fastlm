@@ -37,3 +37,7 @@ trash/
 tea_debug.log
 .ruff_cache
 
+# Offline metrics for plotting
+notebooks/data/
+notebooks/store.csv
+
