@@ -23,6 +23,7 @@ flags.DEFINE_integer('job_cluster', None, 'Job cluster ID.')
 flags.DEFINE_string('backend', 'fla', 'Which model backend are we using?')
 flags.DEFINE_string('cluster_id', 'mpi', 'Which cluster are we running things on?')
 flags.DEFINE_integer('grad_accumulation_steps', None, 'Override gradient accumulation steps.')
+flags.DEFINE_integer('micro_batch_size', None, 'Override the per-GPU micro batch size set from `peak_mbs`.')
 FLAGS = flags.FLAGS
 
 
@@ -67,6 +68,12 @@ def main(argv):
   utils.set_arch(cfg)
   utils.set_batch_sizes(cfg, world_size, FLAGS.cluster_id)
   utils.set_token_budget_id_from_gbs(cfg)
+
+  if FLAGS.micro_batch_size is not None:
+    if FLAGS.micro_batch_size < 1:
+      raise ValueError('--micro_batch_size must be at least 1.')
+    cfg.micro_batch_size = FLAGS.micro_batch_size
+    cfg.global_batch_size = cfg.micro_batch_size * cfg.grad_accumulation_steps * world_size
 
   if FLAGS.grad_accumulation_steps is not None:
     if FLAGS.grad_accumulation_steps < 1:

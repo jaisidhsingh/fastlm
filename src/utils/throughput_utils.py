@@ -8,6 +8,7 @@ GPU_PEAK_FLOPS_PER_SEC_MAP = {
   'NVIDIA A100-SXM4-80GB': 312e12,
   'NVIDIA H100 80GB HBM3': 989e12,
   'NVIDIA H100': 835e12,
+  'NVIDIA B200': 2250e12,
 }
 
 
@@ -108,6 +109,9 @@ def parse_throughput_metrics(throughput_metrics, cfg, world_size):
   gpu_peak_flops_per_sec = GPU_PEAK_FLOPS_PER_SEC_MAP.get(gpu_name, None)
   if gpu_peak_flops_per_sec is not None:
     mfu = (world_size * flops_per_step / step_time) / (world_size * gpu_peak_flops_per_sec)
+  else:
+    mfu = None
+    print(f'No peak FLOPs/sec recorded for "{gpu_name}", reporting MFU as None.')
 
   throughput_logs = {
     'throughput/world_size': world_size,

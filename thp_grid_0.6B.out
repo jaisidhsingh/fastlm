@@ -1,0 +1,196 @@
+mpi /home/jsingh/projects/fastlm
+ 
+=== attn [0.6B] on fla backend, MBS=8, GAS=8 ===
+ 
+Measuring throughput under the settings:
+Use flex/optimal attention: True
+Use intra-doc masking: True
+ 
+Measuring throughput of ATTN [0.6B] LLM
+Training on 1 GPUs, GBS=64, MBS=8, GAS=8.
+TransformerForCausalLM(
+  (model): TransformerModel(
+    (embeddings): Embedding(50304, 1152)
+    (layers): ModuleList(
+      (0-27): 28 x TransformerBlock(
+        (attn_norm): RMSNorm(1152, eps=1e-06)
+        (attn): Attention(
+          (q_proj): Linear(in_features=1152, out_features=1152, bias=False)
+          (k_proj): Linear(in_features=1152, out_features=1152, bias=False)
+          (v_proj): Linear(in_features=1152, out_features=1152, bias=False)
+          (o_proj): Linear(in_features=1152, out_features=1152, bias=False)
+          (gate): Linear(in_features=1152, out_features=1152, bias=True)
+          (q_norm): RMSNorm(72, eps=1e-05)
+          (k_norm): RMSNorm(72, eps=1e-05)
+          (rotary): RotaryEmbedding(dim=72, base=500000.0, interleaved=False, pos_idx_in_fp32=True)
+        )
+        (mlp_norm): RMSNorm(1152, eps=1e-06)
+        (mlp): GatedMLP(
+          (gate_proj): Linear(in_features=1152, out_features=3584, bias=False)
+          (up_proj): Linear(in_features=1152, out_features=3584, bias=False)
+          (down_proj): Linear(in_features=3584, out_features=1152, bias=False)
+          (swiglu_linear): SwiGLULinear()
+        )
+      )
+    )
+    (norm): RMSNorm(1152, eps=1e-06)
+  )
+  (lm_head): Linear(in_features=1152, out_features=50304, bias=False)
+)
+Initialized model with 532.71M non-embedding params, or, 591M total params
+Starting training.
+ 
+throughput/world_size 	 1
+throughput/step_time 	 1.2013184044510126
+throughput/tokens_per_sec 	 109106.79426400553
+throughput/mfu 	 0.1549936274968646
+throughput/flops_per_step 	 418942568890368
+=== Throughput analysis steps completed! ===
+ 
+ 
+=== attn [0.6B] on legacy backend, MBS=8, GAS=8 ===
+ 
+Measuring throughput under the settings:
+Use flex/optimal attention: True
+Use intra-doc masking: True
+ 
+Measuring throughput of ATTN [0.6B] LLM
+Training on 1 GPUs, GBS=64, MBS=8, GAS=8.
+Number of parameters: 590_630_976
+Number of non-embedding parameters: 590_630_976
+Transformer(
+  (embed_tokens): Embedding(50304, 1152)
+  (layers): ModuleList(
+    (0-27): 28 x Block(
+      (token_mixer): GatedAttention(
+        (w_qkv): Linear(in_features=1152, out_features=3456, bias=False)
+        (w_out): Linear(in_features=1152, out_features=1152, bias=False)
+        (w_gate): Linear(in_features=1152, out_features=1152, bias=False)
+        (q_norm): RMSNorm()
+        (k_norm): RMSNorm()
+      )
+      (mlp): GLU(
+        (fc1): Linear(in_features=1152, out_features=7168, bias=False)
+        (fc2): Linear(in_features=3584, out_features=1152, bias=False)
+      )
+      (token_mixer_norm): RMSNorm()
+      (mlp_norm): RMSNorm()
+    )
+  )
+  (out_norm): RMSNorm()
+  (lm_head): Linear(in_features=1152, out_features=50304, bias=False)
+)
+Initialized model with 532.68M non-embedding params, or, 591M total params
+Compiling the model...
+Compiling the entire model with torch.compile
+Starting training.
+ 
+throughput/world_size 	 1
+throughput/step_time 	 1.1454159214626998
+throughput/tokens_per_sec 	 114431.7950745967
+throughput/mfu 	 0.16254831062387942
+throughput/flops_per_step 	 418917201739776
+=== Throughput analysis steps completed! ===
+ 
+ 
+=== gdn [0.6B] on fla backend, MBS=8, GAS=8 ===
+ 
+Measuring throughput under the settings:
+Use flex/optimal attention: True
+Use intra-doc masking: True
+ 
+Measuring throughput of GDN [0.6B] LLM
+Training on 1 GPUs, GBS=64, MBS=8, GAS=8.
+GatedDeltaNetForCausalLM(
+  (model): GatedDeltaNetModel(
+    (embeddings): Embedding(50304, 1152)
+    (layers): ModuleList(
+      (0-27): 28 x GatedDeltaNetBlock(
+        (attn_norm): RMSNorm(1152, eps=1e-06)
+        (attn): GatedDeltaNet(
+          (q_proj): Linear(in_features=1152, out_features=1152, bias=False)
+          (k_proj): Linear(in_features=1152, out_features=1152, bias=False)
+          (v_proj): Linear(in_features=1152, out_features=2304, bias=False)
+          (a_proj): Linear(in_features=1152, out_features=12, bias=False)
+          (b_proj): Linear(in_features=1152, out_features=12, bias=False)
+          (q_conv1d): ShortConvolution(1152, 1152, kernel_size=(4,), stride=(1,), padding=(3,), groups=1152, bias=False, activation=silu, backend=triton)
+          (k_conv1d): ShortConvolution(1152, 1152, kernel_size=(4,), stride=(1,), padding=(3,), groups=1152, bias=False, activation=silu, backend=triton)
+          (v_conv1d): ShortConvolution(2304, 2304, kernel_size=(4,), stride=(1,), padding=(3,), groups=2304, bias=False, activation=silu, backend=triton)
+          (g_proj): Linear(in_features=1152, out_features=2304, bias=False)
+          (o_norm): FusedRMSNormGated(192, eps=1e-05, activation=swish)
+          (o_proj): Linear(in_features=2304, out_features=1152, bias=False)
+        )
+        (mlp_norm): RMSNorm(1152, eps=1e-06)
+        (mlp): GatedMLP(
+          (gate_proj): Linear(in_features=1152, out_features=3584, bias=False)
+          (up_proj): Linear(in_features=1152, out_features=3584, bias=False)
+          (down_proj): Linear(in_features=3584, out_features=1152, bias=False)
+          (swiglu_linear): SwiGLULinear()
+        )
+      )
+    )
+    (norm): RMSNorm(1152, eps=1e-06)
+  )
+  (lm_head): Linear(in_features=1152, out_features=50304, bias=False)
+)
+Initialized model with 645.45M non-embedding params, or, 703M total params
+Starting training.
+ 
+throughput/world_size 	 1
+throughput/step_time 	 1.6522117750253529
+throughput/tokens_per_sec 	 79331.2346402983
+throughput/mfu 	 0.13654487029089124
+throughput/flops_per_step 	 507602345656320
+=== Throughput analysis steps completed! ===
+ 
+ 
+=== gdn [0.6B] on legacy backend, MBS=8, GAS=8 ===
+ 
+Measuring throughput under the settings:
+Use flex/optimal attention: True
+Use intra-doc masking: True
+ 
+Measuring throughput of GDN [0.6B] LLM
+Training on 1 GPUs, GBS=64, MBS=8, GAS=8.
+Number of parameters: 703_399_968
+Number of non-embedding parameters: 703_399_968
+Transformer(
+  (embed_tokens): Embedding(50304, 1152)
+  (layers): ModuleList(
+    (0-27): 28 x Block(
+      (token_mixer): LegacyGatedDeltaNet(
+        (q_proj): Linear(in_features=1152, out_features=1152, bias=False)
+        (k_proj): Linear(in_features=1152, out_features=1152, bias=False)
+        (v_proj): Linear(in_features=1152, out_features=2304, bias=False)
+        (a_proj): Linear(in_features=1152, out_features=12, bias=False)
+        (b_proj): Linear(in_features=1152, out_features=12, bias=False)
+        (q_conv1d): ShortConvolution(1152, 1152, kernel_size=(4,), stride=(1,), padding=(3,), groups=1152, bias=False, activation=silu, backend=triton)
+        (k_conv1d): ShortConvolution(1152, 1152, kernel_size=(4,), stride=(1,), padding=(3,), groups=1152, bias=False, activation=silu, backend=triton)
+        (v_conv1d): ShortConvolution(2304, 2304, kernel_size=(4,), stride=(1,), padding=(3,), groups=2304, bias=False, activation=silu, backend=triton)
+        (g_proj): Linear(in_features=1152, out_features=2304, bias=False)
+        (o_norm): FusedRMSNormGated(192, eps=1e-05, activation=swish)
+        (o_proj): Linear(in_features=2304, out_features=1152, bias=False)
+      )
+      (mlp): GLU(
+        (fc1): Linear(in_features=1152, out_features=7168, bias=False)
+        (fc2): Linear(in_features=3584, out_features=1152, bias=False)
+      )
+      (token_mixer_norm): RMSNorm()
+      (mlp_norm): RMSNorm()
+    )
+  )
+  (out_norm): RMSNorm()
+  (lm_head): Linear(in_features=1152, out_features=50304, bias=False)
+)
+Initialized model with 645.45M non-embedding params, or, 703M total params
+Compiling the model...
+Compiling the entire model with torch.compile
+Starting training.
+ 
+throughput/world_size 	 1
+throughput/step_time 	 1.6133089100010694
+throughput/tokens_per_sec 	 81244.20511624964
+throughput/mfu 	 0.13983747384979758
+throughput/flops_per_step 	 507602345656320
+=== Throughput analysis steps completed! ===
+ 

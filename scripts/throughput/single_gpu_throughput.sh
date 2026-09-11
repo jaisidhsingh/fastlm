@@ -31,17 +31,22 @@ cd "$PROJECT"
 
 ATTN_06B_CONFIG="$PROJECT/src/config/throughput/attn_0.6B.yaml"
 ATTN_1B_CONFIG="$PROJECT/src/config/throughput/attn_1B.yaml"
+GDN_06B_CONFIG="$PROJECT/src/config/throughput/gdn_0.6B.yaml"
+GDN_1B_CONFIG="$PROJECT/src/config/throughput/gdn_1B.yaml"
 
 MODEL_SIZE="${1:-0.6B}"
 GRAD_ACCUMULATION_STEPS="${2:-}"
+ARCH_ID="${3:-attn}"
 gas_args=()
 if [[ -n "$GRAD_ACCUMULATION_STEPS" ]]; then
   gas_args=(--grad_accumulation_steps "$GRAD_ACCUMULATION_STEPS")
 fi
-case "$MODEL_SIZE" in
-  0.6B) config="$ATTN_06B_CONFIG" ;;
-  1B) config="$ATTN_1B_CONFIG" ;;
-  *) echo "Usage: $0 [0.6B|1B] [GAS]" >&2; exit 2 ;;
+case "$ARCH_ID/$MODEL_SIZE" in
+  attn/0.6B) config="$ATTN_06B_CONFIG" ;;
+  attn/1B) config="$ATTN_1B_CONFIG" ;;
+  gdn/0.6B) config="$GDN_06B_CONFIG" ;;
+  gdn/1B) config="$GDN_1B_CONFIG" ;;
+  *) echo "Usage: $0 [0.6B|1B] [GAS] [attn|gdn]" >&2; exit 2 ;;
 esac
 
 python -m experiments.measure_throughput \

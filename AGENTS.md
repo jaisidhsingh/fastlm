@@ -39,4 +39,9 @@ hybrid LLM architectures (interleaving Gated DeltaNet layers with dense (full so
 - When editing anything inside `manager`, make sure that the desired interface of using `manager`-as given in `scripts/submit/train.sh` and `scripts/submit/eval.sh`can be used without change.
 - When editing anything inside `src`, make sure that the plumbing into `experiments/train/pretrain.py` and management of experimental constants in `src/constants.py` is verified as correct.
 
+## Permissions
+- Read, write files is allowed
+- Executing ruff or using python to test code is allowed
+- Running files that explicitly run LLMs on GPUs needs permission: ask before executing those files as full scripts.
+- Executing files with tools for checking syntax etc is allowed.
 
